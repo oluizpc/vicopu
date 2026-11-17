@@ -26,8 +26,6 @@ PADROES = {
         "peso_audio": 0.4,
         "usar_audio": True,
         "audio_salto_db": 6.0,
-        "ignorar_comandos": True,   # mensagens começando com "!" (comando de bot) não contam
-        "ignorar_palavras": [],     # ex.: ["sorteio"]: mensagens com isso não contam pro pico
         "palavras_chave": [
             "kkkk", "kkkkk", "clip", "clipa", "clipe", "corta", "kekw", "lul",
             "omegalul", "pog", "poggers", "pogchamp", "monkas", "???", "wtf",
