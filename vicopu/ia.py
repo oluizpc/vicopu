@@ -96,13 +96,33 @@ Regras:
 - descricao: 1-2 frases curtas.
 - hashtags: 3 a 5, sem repetir as fixas: {fixas}.
 {extras}
-Responda SÓ com JSON: {{"publicar": true, "nota": 0-10, "inicio": 0.0, "fim": 0.0, "titulo": "", "descricao": "", "hashtags": [], "motivo": ""}}
+Responda usando a ferramenta avaliar_clipe.
 
 TRANSCRIÇÃO:
 {transcricao}
 
 CHAT NO PICO:
 {chat}"""
+
+
+FERRAMENTA_JUIZ = {
+    "name": "avaliar_clipe",
+    "description": "Decide se o trecho vira clipe e prepara a publicação.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "publicar": {"type": "boolean"},
+            "nota": {"type": "number", "description": "0 a 10"},
+            "inicio": {"type": "number", "description": "segundos desde o início do trecho"},
+            "fim": {"type": "number", "description": "segundos desde o início do trecho"},
+            "titulo": {"type": "string"},
+            "descricao": {"type": "string"},
+            "hashtags": {"type": "array", "items": {"type": "string"}},
+            "motivo": {"type": "string"},
+        },
+        "required": ["publicar", "nota", "inicio", "fim", "titulo", "descricao", "hashtags", "motivo"],
+    },
+}
 
 
 def _texto_transcricao(palavras):
@@ -138,10 +158,16 @@ def julgar(cfg, canal, palavras, amostra_chat, duracao):
             transcricao=_texto_transcricao(palavras),
             chat="\n".join(amostra_chat[-30:]) or "(sem chat)")
         r = anthropic.Anthropic().messages.create(
-            model=ia["modelo"], max_tokens=700, messages=[{"role": "user", "content": prompt}])
-        texto = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
-        m = re.search(r"\{.*\}", texto, re.S)
-        dados = json.loads(m.group(0))
+            model=ia["modelo"], max_tokens=700, tools=[FERRAMENTA_JUIZ],
+            tool_choice={"type": "tool", "name": "avaliar_clipe"},  # resposta sempre estruturada
+            messages=[{"role": "user", "content": prompt}])
+        dados = next((b.input for b in r.content if getattr(b, "type", "") == "tool_use"), None)
+        if dados is None:
+            texto = "".join(getattr(b, "text", "") for b in r.content)
+            m = re.search(r"\{.*\}", texto, re.S)
+            if not m:
+                raise ValueError(f"resposta sem dados: {texto[:200]!r}")
+            dados = json.loads(m.group(0))
         saida = {**padrao, **dados}
         saida["inicio"] = max(0.0, float(saida["inicio"]))
         saida["fim"] = min(duracao, float(saida["fim"]))

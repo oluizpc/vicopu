@@ -17,10 +17,24 @@ import numpy as np
 log = logging.getLogger("camauto")
 LARG, ALT = 640, 360  # resolução de análise (rápida)
 
-PROMPT = """Esta é uma imagem de uma live (jogo/stream). Encontre a WEBCAM do streamer: a janela onde aparece a pessoa REAL filmada pela câmera (não personagens do jogo, não avatares, não fotos estáticas, não emotes).
-Responda SÓ com JSON, coordenadas em frações da imagem (0 a 1), cobrindo exatamente a área do vídeo da câmera (sem banners, nomes ou molduras decorativas em volta):
-{"tem_cam": true, "x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}
-Se não houver webcam de pessoa real, responda {"tem_cam": false}."""
+PROMPT = """Esta é uma imagem de uma live (jogo/stream). Encontre a WEBCAM do streamer: a janela onde aparece a pessoa REAL filmada pela câmera (não personagens do jogo, não avatares, não fotos estáticas, não emotes, não pessoas dentro de um vídeo que o streamer está assistindo/reagindo).
+Responda usando a ferramenta informar_cam. Coordenadas em frações da imagem (0 a 1), cobrindo exatamente a área do vídeo da câmera (sem banners, nomes, chat ou molduras decorativas em volta). Se não houver webcam de pessoa real, use tem_cam=false."""
+
+FERRAMENTA_CAM = {
+    "name": "informar_cam",
+    "description": "Informa se há webcam do streamer na imagem e onde ela está (frações de 0 a 1).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "tem_cam": {"type": "boolean", "description": "true se há webcam de uma pessoa real"},
+            "x": {"type": "number", "description": "borda esquerda da cam (0 a 1)"},
+            "y": {"type": "number", "description": "borda de cima da cam (0 a 1)"},
+            "w": {"type": "number", "description": "largura da cam (0 a 1)"},
+            "h": {"type": "number", "description": "altura da cam (0 a 1)"},
+        },
+        "required": ["tem_cam"],
+    },
+}
 
 
 def extrair_quadros(ffmpeg, caminhos, n=5):
@@ -170,16 +184,25 @@ def perguntar_claude(jpeg, modelo):
         return None
     import anthropic
     r = anthropic.Anthropic().messages.create(
-        model=modelo, max_tokens=200,
+        model=modelo, max_tokens=300,
+        tools=[FERRAMENTA_CAM], tool_choice={"type": "tool", "name": "informar_cam"},  # resposta sempre estruturada
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                          "data": base64.b64encode(jpeg).decode()}},
             {"type": "text", "text": PROMPT}]}])
-    texto = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
-    dados = json.loads(re.search(r"\{.*\}", texto, re.S).group(0))
+    dados = next((b.input for b in r.content if getattr(b, "type", "") == "tool_use"), None)
+    if dados is None:  # reserva: tenta achar um JSON no texto
+        texto = "".join(getattr(b, "text", "") for b in r.content)
+        m = re.search(r"\{.*\}", texto, re.S)
+        if not m:
+            raise ValueError(f"resposta sem dados: {texto[:200]!r}")
+        dados = json.loads(m.group(0))
     if not dados.get("tem_cam"):
         return {"tem_cam": False}
-    caixa = {k: float(dados[k]) for k in ("x", "y", "w", "h")}
+    try:
+        caixa = {k: float(dados[k]) for k in ("x", "y", "w", "h")}
+    except (KeyError, TypeError, ValueError):
+        raise ValueError(f"Claude disse que tem cam mas não mandou a posição: {dados}")
     if caixa["w"] < 0.03 or caixa["h"] < 0.03:
         return {"tem_cam": False}
     return {"tem_cam": True, **caixa}
@@ -299,14 +322,15 @@ def detectar(cfg, caminhos_segmentos, nome_canal):
         if not cfg["ia"].get("camauto_claude", True):
             log.info("[%s] Nenhum rosto achado localmente e o Claude está desligado. Usando blur.", nome_canal)
             return None
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            log.info("[%s] Nenhum rosto achado localmente (e sem ANTHROPIC_API_KEY pro Claude). Usando blur.",
+                     nome_canal)
+            return None
         try:
             resposta = perguntar_claude(jpeg, cfg["ia"]["modelo"])
         except Exception as e:
-            log.warning("[%s] Claude não conseguiu analisar a cam (%s).", nome_canal, e)
-            resposta = None
-        if resposta is None:
-            log.info("[%s] Nenhum rosto achado localmente (e sem ANTHROPIC_API_KEY pro Claude). Usando blur.",
-                     nome_canal)
+            log.warning("[%s] Claude não conseguiu analisar a cam (%s). Usando blur; tento de novo em 15 min.",
+                        nome_canal, e)
             return None
         if not resposta["tem_cam"]:
             log.info("[%s] Nenhuma webcam na tela. Usando blur.", nome_canal)
