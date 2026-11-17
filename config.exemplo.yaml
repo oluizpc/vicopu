@@ -45,6 +45,8 @@ publicacao:
   modo: revisao                  # auto = publica sozinho · revisao = aprova no painel · nenhum = só gera
   painel_host: 127.0.0.1         # 0.0.0.0 para acessar de fora (coloque senha/VPN na frente!)
   painel_porta: 8787
+  credito: "🎮 Corte da live de {streamer}. Live completa: {link}"   # vai na descrição do YouTube
+  credito_tiktok: "🎮 Live: {link_curto}"                            # vai na legenda do TikTok
 
 # ---------- Apps (uma vez só) ----------
 youtube_app:
@@ -68,7 +70,8 @@ contas:
 # ---------- Lives vigiadas ----------
 canais:
   - nome: streamer_twitch
-    apelido: Fulano              # como o Claude chama o streamer no título
+    apelido: Fulano              # nome do streamer no título e no crédito
+    # credito: false             # desliga o crédito só deste canal
     plataforma: twitch           # twitch | kick | youtube | arquivo (teste)
     canal: nome_do_canal
     layout: auto                 # o VICOPU acha a webcam sozinho (rosto grátis; Claude só se precisar)

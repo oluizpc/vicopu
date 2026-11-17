@@ -9,6 +9,8 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .config import credito as cfg_credito
+
 PAGINA = r"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>VICOPU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
@@ -132,6 +134,7 @@ ${["renderizando","publicando"].includes(st)?"":`<button class="btn fant perigo"
 ${podeEditar&&c.tem_video&&!(c.destinos&&c.destinos.length)?`<div class="res">⚠ Sem destino pra publicar: coloque <b>publicar_em</b> no canal <b>${esc(c.canal)}</b> no config.yaml e reinicie. Ou use Baixar/Copiar e poste na mão.</div>`:""}
 ${c.destinos&&c.destinos.length&&podeEditar?`<div class="res">Vai pra: ${esc(c.destinos.join(", "))}</div>`:""}
 ${c.resultados&&Object.keys(c.resultados).length?`<div class="res">${resultados(c.resultados)}</div>`:""}
+${c.credito?`<div class="res">${esc(c.credito)}</div>`:""}
 <details><summary>Por que esse clipe?</summary><p>${esc(c.motivo)}</p>${c.motivo_ia&&c.motivo_ia!=="sem IA"?`<p><b>IA:</b> ${esc(c.motivo_ia)}</p>`:""}</details>
 </div></div>`}
 function renderClipes(){const contagem=Object.fromEntries(ABAS.map(([k,,f])=>[k,estado.clipes.filter(c=>f(c.status||"")).length]));
@@ -162,9 +165,9 @@ async function descartar(id){await post("/descartar/"+id);toast("Descartado");at
 async function excluir(id){if(!confirm("Excluir este clipe do painel e do disco?"))return;await post("/excluir/"+id);toast("Excluído");atualizar()}
 async function limpar(){if(!confirm("Apagar do disco TODOS os clipes descartados?"))return;await post("/limpar/descartados");toast("Descartados apagados");atualizar()}
 async function copiar(id){const c=estado.clipes.find(x=>x.id===id);const tags=[...(c.hashtags_fixas||[]),...(c.hashtags||[])]
-.map(t=>t.startsWith("#")?t:"#"+t);const txt=($("#t_"+id).value.trim()+" "+[...new Set(tags)].join(" ")).trim();
+.map(t=>t.startsWith("#")?t:"#"+t);const txt=[$("#t_"+id).value.trim(),c.credito||"",[...new Set(tags)].join(" ")].filter(x=>x).join("\n\n");
 try{await navigator.clipboard.writeText(txt)}catch(e){const a=document.createElement("textarea");a.value=txt;document.body.appendChild(a);a.select();document.execCommand("copy");a.remove()}
-toast("📋 Título + hashtags copiados")}
+toast("📋 Título, crédito e hashtags copiados")}
 function listaAba(){const f=ABAS.find(a=>a[0]===aba)[2];return estado.clipes.filter(c=>f(c.status||""))}
 function pintarSel(){document.querySelectorAll(".clip").forEach(el=>el.classList.toggle("sel",sel.has(el.dataset.id)));
 const n=sel.size;$("#lote").classList.toggle("on",n>0);$("#lote_qtd").textContent=n+" selecionado"+(n==1?"":"s")}
@@ -202,6 +205,8 @@ def iniciar(fabrica, vigias, host, porta):
             m = dict(m)
             m["tem_video"] = os.path.exists(m.get("video", "") or "")
             m["destinos"] = fabrica.destinos_atuais(m)
+            canal = next((c for c in fabrica.cfg["canais"] if c["nome"] == m.get("canal")), None)
+            m["credito"] = cfg_credito(fabrica.cfg, canal)
             clipes.append(m)
         return {"modo": fabrica.cfg["publicacao"]["modo"], "lives": lives, "clipes": clipes}
 

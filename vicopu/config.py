@@ -59,6 +59,9 @@ PADROES = {
         "modo": "revisao",  # auto | revisao | nenhum
         "painel_host": "127.0.0.1",
         "painel_porta": 8787,
+        # crédito do streamer em todo clipe. {streamer}, {link} e {link_curto} são trocados sozinhos
+        "credito": "🎮 Corte da live de {streamer}. Live completa: {link}",
+        "credito_tiktok": "🎮 Live: {link_curto}",
     },
     "youtube_app": {"client_secrets": "./credenciais/youtube_client_secret.json"},
     "tiktok_app": {"client_key": "", "client_secret": "", "redirect_uri": ""},
@@ -106,6 +109,33 @@ def carregar(caminho):
         c.setdefault("hashtags", [])
     os.makedirs(cfg["geral"]["pasta_trabalho"], exist_ok=True)
     return cfg
+
+
+def link_do_canal(canal):
+    """Link da página do streamer (pra dar crédito): o canal, não a live do momento."""
+    plat = canal["plataforma"].lower()
+    alvo = str(canal["canal"])
+    if alvo.startswith("http"):
+        return alvo
+    if plat == "twitch":
+        return f"https://www.twitch.tv/{alvo}"
+    if plat == "kick":
+        return f"https://kick.com/{alvo}"
+    if plat == "youtube":
+        return f"https://www.youtube.com/{alvo if alvo.startswith('@') else '@' + alvo}"
+    return ""
+
+
+def credito(cfg, canal):
+    """Texto de crédito do clipe (vazio se o canal tiver credito: false)."""
+    if not canal or canal.get("credito", True) is False:
+        return ""
+    modelo = cfg["publicacao"].get("credito") or ""
+    link = link_do_canal(canal)
+    if not modelo or not link:
+        return ""
+    return modelo.format(streamer=canal.get("apelido", canal["nome"]), link=link,
+                         link_curto=link.replace("https://", "").replace("www.", ""))
 
 
 def url_da_live(canal):
