@@ -148,13 +148,26 @@ class ChatKick(LeitorChat):
         self.log.info("Chat da Kick conectado (sala %s)", sala)
         try:
             while self.no_ar():
-                msg = json.loads(ws.recv())
+                bruto = ws.recv()
+                if not bruto or not isinstance(bruto, str):
+                    continue  # quadro vazio/controle: a Kick manda às vezes, não é queda
+                try:
+                    msg = json.loads(bruto)
+                except ValueError:
+                    continue
+                if not isinstance(msg, dict):
+                    continue
                 ev = msg.get("event", "")
                 if ev == "pusher:ping":
                     ws.send(json.dumps({"event": "pusher:pong", "data": {}}))
                 elif ev.endswith("ChatMessageEvent"):
                     dados = msg.get("data")
-                    dados = json.loads(dados) if isinstance(dados, str) else dados
+                    try:
+                        dados = json.loads(dados) if isinstance(dados, str) else dados
+                    except ValueError:
+                        continue
+                    if not isinstance(dados, dict):
+                        continue
                     texto = _EMOTE_KICK.sub(r" \1 ", dados.get("content", ""))
                     self.ao_msg(texto, time.time())
         finally:
