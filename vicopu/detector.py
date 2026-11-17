@@ -44,7 +44,17 @@ class Detector:
         t = texto.lower()
         return any(p in t for p in self.palavras)
 
+    def _ignorar(self, texto):
+        t = (texto or "").strip().lower()
+        if not t:
+            return True
+        if self.c.get("ignorar_comandos", True) and t.startswith("!"):
+            return True  # !sorteio, !pix, !discord... é comando de bot, não reação
+        return any(p and p.lower() in t for p in self.c.get("ignorar_palavras", []))
+
     def nova_msg(self, texto, instante):
+        if self._ignorar(texto):
+            return
         with self.trava:
             self.msgs.append((instante, texto, self._tem_palavra(texto)))
 
