@@ -94,7 +94,7 @@ Regras:
 - "inicio" e "fim": recorte o melhor pedaço DENTRO do trecho (15 a {maxd}s), começando no gancho, sem enrolação no começo e terminando logo depois da reação/punchline.
 - titulo: SEMPRE um título de corte pronto pra postar, MESMO quando publicar=false (o humano pode decidir postar). Nunca escreva o motivo ou a avaliação no título. Até 80 caracteres, em português do Brasil, estilo corte viral (gancho forte, pode usar CAIXA ALTA em 1-2 palavras e 1 emoji). Não invente coisas que não estão na transcrição.
 - motivo: aqui sim, explique a avaliação.
-- descricao: 1-2 frases curtas.
+- descricao: 1-2 frases curtas PARA O PÚBLICO, que vão na descrição do vídeo (chamam pra assistir e dão contexto do que acontece). NUNCA escreva aqui a sua avaliação, a nota, críticas ao trecho ou o motivo de publicar/não publicar: isso vai só em "motivo".
 - hashtags: 3 a 5, sem repetir as fixas: {fixas}.
 {extras}
 Responda usando a ferramenta avaliar_clipe.
@@ -117,9 +117,9 @@ FERRAMENTA_JUIZ = {
             "inicio": {"type": "number", "description": "segundos desde o início do trecho"},
             "fim": {"type": "number", "description": "segundos desde o início do trecho"},
             "titulo": {"type": "string", "description": "título do clipe pronto pra postar (nunca o motivo da nota)"},
-            "descricao": {"type": "string"},
+            "descricao": {"type": "string", "description": "texto público da descrição do vídeo (nunca a avaliação)"},
             "hashtags": {"type": "array", "items": {"type": "string"}},
-            "motivo": {"type": "string"},
+            "motivo": {"type": "string", "description": "sua avaliação interna: por que publicar ou não (não é publicado)"},
         },
         "required": ["publicar", "nota", "inicio", "fim", "titulo", "descricao", "hashtags", "motivo"],
     },
