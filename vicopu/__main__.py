@@ -38,10 +38,13 @@ def rodar(cfg):
     p = cfg["publicacao"]
     painel.iniciar(fabrica, central, p["painel_host"], p["painel_porta"])
     log = logging.getLogger("vicopu")
-    extras = sum(1 for c in cfg["canais"] if c.get("do_painel"))
+    extras = sum(1 for v in central.lista() if v.canal.get("do_painel"))
+    paradas = [c["nome"] for c in central.paradas()]
     log.info("VICOPU no ar: %d canal(is)%s. Painel em http://%s:%s  (Ctrl+C para sair)",
              len(central.lista()), f" ({extras} adicionado(s) pelo painel)" if extras else "",
              p["painel_host"], p["painel_porta"])
+    if paradas:
+        log.info("Paradas (não estou vigiando): %s. Pra voltar: 'Vigiar de novo' no painel.", ", ".join(paradas))
     try:
         while True:
             for v in central.lista():

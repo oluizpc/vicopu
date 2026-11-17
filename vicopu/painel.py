@@ -44,6 +44,9 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);m
 .live select,.filtro select,.ajuste input,.ajuste select{background:var(--card2);color:var(--txt);border:1px solid var(--borda);border-radius:8px;padding:5px 8px;font:inherit;font-size:12px}
 .ajuste{margin-top:8px;font-size:12px;color:var(--sub)}.ajuste .lin{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
 .ajuste input[type=number]{width:72px}.sino.on{background:var(--roxo);color:#fff}
+#paradas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:-14px 0 22px;font-size:12px;color:var(--sub)}
+.parada{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--borda);border-radius:999px;padding:3px 4px 3px 10px;color:var(--txt)}
+.parada .btn{padding:4px 8px;font-size:12px}
 .live .info{color:var(--sub);font-size:12px}
 .btn{border:0;border-radius:9px;padding:8px 12px;font-weight:650;font-size:13px;cursor:pointer;color:var(--txt);background:var(--card2);
 display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
@@ -106,7 +109,7 @@ main{padding:14px}.lives,.grade{grid-template-columns:1fr}}
 <select id="n_idioma"><option value="padrao">legenda: padrão</option><option value="pt">português</option><option value="en">inglês</option><option value="es">espanhol</option><option value="auto">detectar</option></select>
 <button class="btn roxo" onclick="addLive()">Vigiar</button></div>
 <div class="dica">Começa a vigiar na hora, com a cam automática. Publica no mesmo destino do primeiro canal do config. Fica salva pra próxima vez (em dados/canais_painel.yaml).</div></details>
-<div class="lives" id="lives"></div>
+<div class="lives" id="lives"></div><div id="paradas"></div>
 <h2>Clipes</h2>
 <div class="abas" id="abas"></div>
 <div id="lote"><span class="qtd" id="lote_qtd"></span>
@@ -159,7 +162,7 @@ return`<div class="live"><div class="nome"><span class="dot ${l.no_ar?"on":""}">
 ${termo(l)}
 <div class="info">sensibilidade <select onchange="mudarSens('${esc(l.nome)}',this.value)">${["alta","normal","baixa"].map(o=>`<option ${o===l.sensibilidade?"selected":""}>${o}</option>`).join("")}</select></div>
 <div class="acoes2"><button class="btn roxo" ${l.no_ar?"":"disabled"} onclick="cortar('${esc(l.nome)}')">✂ Cortar agora</button>
-<button class="btn fant perigo" title="Parar de vigiar esta live" onclick="pararLive('${esc(l.nome)}',${l.do_painel})">⏹ Parar</button></div></div>`}).join("")||
+<button class="btn fant perigo" title="Parar de vigiar esta live" onclick="pararLive('${esc(l.nome)}')">⏹ Parar</button></div></div>`}).join("")||
 `<div class="vazia">Nenhuma live: adicione uma acima.</div>`}
 function termo(l){const t=l.termometro;if(!t)return"";if(t.aquecendo)return`<div class="info">🌡 aprendendo o ritmo do chat… (${t.msgs} msgs/${t.janela}s)</div>`;
 const pct=Math.min(100,Math.round(100*t.score/t.limiar)),cls=pct>=100?"pico":pct>=70?"quente":"";
@@ -168,8 +171,12 @@ async function mudarSens(n,v){await post("/sensibilidade/"+encodeURIComponent(n)
 async function addLive(){const link=$("#n_link").value.trim();if(!link){toast("Cole o link da live");return}
 const nome=await post("/live/adicionar",JSON.stringify({link,apelido:$("#n_apelido").value,sensibilidade:$("#n_sens").value,idioma:$("#n_idioma").value}));
 $("#n_link").value="";$("#n_apelido").value="";toast("👀 Vigiando "+nome+". A cam é achada em ~1 min.");atualizar()}
-async function pararLive(n,doPainel){if(!confirm(doPainel?`Parar de vigiar ${n} e tirar da lista?`:`Parar de vigiar ${n}? (está no config.yaml: volta quando reiniciar o VICOPU)`))return;
+async function pararLive(n){if(!confirm(`Parar de vigiar ${n}? Ela fica parada (mesmo reiniciando) até você clicar em "Vigiar de novo".`))return;
 await post("/parar/"+encodeURIComponent(n));toast("⏹ "+n+" parada");atualizar()}
+async function retomar(n){await post("/retomar/"+encodeURIComponent(n));toast("👀 Vigiando "+n+" de novo");atualizar()}
+async function esquecer(n){if(!confirm(`Tirar ${n} da lista de vez?`))return;await post("/esquecer/"+encodeURIComponent(n));toast(n+" removida");atualizar()}
+function renderParadas(){const p=estado.paradas||[];$("#paradas").innerHTML=p.length?`<span>Paradas:</span>`+p.map(l=>`<span class="parada">${esc(l.nome)}
+<button class="btn" onclick="retomar('${esc(l.nome)}')">▶ Vigiar de novo</button>${l.do_painel?`<button class="btn fant perigo" title="Tirar da lista de vez" onclick="esquecer('${esc(l.nome)}')">✕</button>`:""}</span>`).join(""):""}
 function ajuste(c){const [a,b]=c.corte,j=c.janela||b;
 return`<details class="ajuste" id="aj_${c.id}"><summary>✂ Ajustar o corte</summary>
 <div>O trecho gravado tem ${j.toFixed(0)} s. Hoje o clipe vai de ${a.toFixed(1)} s a ${b.toFixed(1)} s dele.</div>
@@ -234,7 +241,7 @@ const p=estado.clipes.filter(c=>["pendente","pronto","erro"].includes(c.status))
 pub=estado.clipes.filter(c=>c.status==="publicado").length,ao=estado.lives.filter(l=>l.no_ar).length;
 $("#resumo").innerHTML=`<span><b>${ao}</b>/${estado.lives.length} ao vivo</span><span><b>${p}</b> aguardando</span><span><b>${pub}</b> publicados</span>`;
 document.title=(p?`(${p}) `:"")+"VICOPU";const ids=new Set(estado.clipes.map(c=>c.id));
-[...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});avisarNovos();pintarSino();if(!$("#lives").contains(document.activeElement))renderLives();renderClipes();pintarSel()}
+[...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});avisarNovos();pintarSino();if(!$("#lives").contains(document.activeElement))renderLives();renderParadas();renderClipes();pintarSel()}
 async function atualizar(){try{estado=await (await fetch("/api/estado")).json();render()}catch(e){}}
 function trocar(k){aba=k;sel.clear();localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
 async function cortar(n){const b=event&&event.target;if(b){b.disabled=true;b.textContent="✂ Pedido!"}
@@ -292,7 +299,9 @@ def iniciar(fabrica, central, host, porta):
             pub = fabrica.cfg["publicacao"]
             m["credito_tiktok"] = cfg_credito({**fabrica.cfg, "publicacao": {**pub, "credito": pub.get("credito_tiktok")}}, canal)
             clipes.append(m)
-        return {"modo": fabrica.cfg["publicacao"]["modo"], "lives": lives, "clipes": clipes}
+        paradas = [{"nome": c["nome"], "plataforma": c["plataforma"], "do_painel": bool(c.get("do_painel"))}
+                   for c in central.paradas()]
+        return {"modo": fabrica.cfg["publicacao"]["modo"], "lives": lives, "paradas": paradas, "clipes": clipes}
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -358,6 +367,10 @@ def iniciar(fabrica, central, host, porta):
                     return self._enviar(200, nome, "text/plain; charset=utf-8")
                 elif acao == "parar":
                     central.remover(alvo)
+                elif acao == "retomar":
+                    central.retomar(alvo)
+                elif acao == "esquecer":
+                    central.esquecer(alvo)
                 elif acao == "sensibilidade":
                     central.mudar_sensibilidade(alvo, corpo.strip())
                 elif acao == "remontar":

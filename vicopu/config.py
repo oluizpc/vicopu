@@ -126,6 +126,28 @@ def salvar_canais_painel(cfg, canais):
         yaml.safe_dump(canais, f, allow_unicode=True, sort_keys=False)
 
 
+def arquivo_paradas(cfg):
+    return os.path.join(cfg["geral"]["pasta_trabalho"], "lives_paradas.yaml")
+
+
+def ler_paradas(cfg):
+    """Nomes das lives do config.yaml que você parou pelo painel (continuam paradas ao reiniciar)."""
+    try:
+        with open(arquivo_paradas(cfg), encoding="utf-8") as f:
+            dados = yaml.safe_load(f) or []
+        return {str(n) for n in dados}
+    except OSError:
+        return set()
+
+
+def salvar_paradas(cfg, nomes):
+    os.makedirs(cfg["geral"]["pasta_trabalho"], exist_ok=True)
+    with open(arquivo_paradas(cfg), "w", encoding="utf-8") as f:
+        f.write("# Lives do config.yaml paradas pelo painel. Apague um nome daqui (ou use 'Vigiar de novo'"
+                " no painel) pra voltar a vigiar.\n")
+        yaml.safe_dump(sorted(nomes), f, allow_unicode=True)
+
+
 def carregar(caminho):
     with open(caminho, encoding="utf-8") as f:
         bruto = yaml.safe_load(f) or {}
@@ -137,6 +159,10 @@ def carregar(caminho):
             raise ValueError(f"Nome de canal repetido: {c['nome']}")
         nomes.add(c["nome"])
     os.makedirs(cfg["geral"]["pasta_trabalho"], exist_ok=True)
+    paradas = ler_paradas(cfg)
+    for c in cfg["canais"]:
+        if c["nome"] in paradas:
+            c["parado"] = True
     for c in ler_canais_painel(cfg):
         if c.get("nome") in nomes:
             continue  # o config.yaml manda

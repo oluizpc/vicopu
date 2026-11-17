@@ -247,7 +247,7 @@ Abra **http://127.0.0.1:8787** com o VICOPU ligado. A página atualiza sozinha a
 - publica no mesmo destino do primeiro canal do config;
 - fica salva em `dados/canais_painel.yaml` e volta sozinha quando você reiniciar. Pra tirar, use **⏹ Parar**.
 
-Parar uma live que está no `config.yaml` vale só até reiniciar; pra tirar de vez, apague do config.
+**⏹ Parar é lembrado:** a live parada continua parada mesmo depois de reiniciar o VICOPU. Ela aparece embaixo das lives, em **Paradas**, com o botão **▶ Vigiar de novo**. Lives adicionadas pelo painel também têm um **✕** pra tirar da lista de vez. O `config.yaml` nunca é mexido: as paradas do config ficam anotadas em `dados/lives_paradas.yaml`.
 
 **Descartados pela IA** também têm vídeo: dá pra assistir, ler o motivo do descarte e publicar mesmo assim, se a IA errou.
 

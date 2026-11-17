@@ -447,17 +447,27 @@ class Fabrica:
 
 
 class Central:
-    """Lista de lives vigiadas, que pode mudar com o VICOPU rodando (adicionar/parar pelo painel)."""
+    """Lista de lives vigiadas, que pode mudar com o VICOPU rodando (adicionar/parar/retomar pelo painel).
+
+    Parar é lembrado: a live continua parada quando você reinicia, até clicar em 'Vigiar de novo'.
+    - live do painel: fica em dados/canais_painel.yaml com parado: true
+    - live do config.yaml: o nome vai pra dados/lives_paradas.yaml (o config.yaml não é mexido)
+    """
 
     def __init__(self, cfg, fabrica):
         self.cfg, self.fabrica = cfg, fabrica
         self.trava = threading.Lock()
         self.log = logging.getLogger("vicopu")
-        self.vigias = [Vigia(c, cfg, fabrica) for c in cfg["canais"]]
+        self.vigias = [Vigia(c, cfg, fabrica) for c in cfg["canais"]
+                       if not c.get("parado") and not c.get("removido")]
 
     def lista(self):
         with self.trava:
             return list(self.vigias)
+
+    def paradas(self):
+        with self.trava:
+            return [c for c in self.cfg["canais"] if c.get("parado") and not c.get("removido")]
 
     def por_nome(self, nome):
         return next((v for v in self.lista() if v.canal["nome"] == nome), None)
@@ -466,11 +476,13 @@ class Central:
         for v in self.lista():
             v.iniciar()
 
-    def _salvar_do_painel(self):
-        from .config import salvar_canais_painel
+    def _persistir(self):
+        from .config import salvar_canais_painel, salvar_paradas
         guardar = [{k: v for k, v in c.items() if k not in ("do_painel", "removido")}
                    for c in self.cfg["canais"] if c.get("do_painel") and not c.get("removido")]
         salvar_canais_painel(self.cfg, guardar)
+        salvar_paradas(self.cfg, {c["nome"] for c in self.cfg["canais"]
+                                  if c.get("parado") and not c.get("do_painel")})
 
     def adicionar(self, dados):
         from .config import canal_do_link, preparar_canal
@@ -489,7 +501,8 @@ class Central:
         if idioma and idioma != "padrao":
             canal["idioma"] = "" if idioma == "auto" else idioma[:5]
         # destino: o mesmo do primeiro canal do config (pra não publicar em lugar inesperado)
-        base = next((c for c in self.cfg["canais"] if c.get("publicar_em")), None)
+        base = next((c for c in self.cfg["canais"] if c.get("publicar_em") and not c.get("do_painel")), None) \
+            or next((c for c in self.cfg["canais"] if c.get("publicar_em")), None)
         canal["publicar_em"] = list(base["publicar_em"]) if base else []
         if base and base.get("hashtags"):
             canal["hashtags"] = list(base["hashtags"])
@@ -497,6 +510,12 @@ class Central:
         with self.trava:
             if any(v.canal["nome"] == nome for v in self.vigias):
                 raise ValueError(f"já existe uma live chamada '{nome}'")
+            parada = next((c for c in self.cfg["canais"] if c["nome"] == nome and c.get("parado")
+                           and not c.get("removido")), None)
+        if parada:  # já existia e estava parada: só volta a vigiar
+            self.retomar(nome)
+            return nome
+        with self.trava:
             self.cfg["canais"] = [c for c in self.cfg["canais"]
                                   if not (c.get("removido") and c["nome"] == nome)]
             canal["do_painel"] = True
@@ -504,7 +523,7 @@ class Central:
             v = Vigia(canal, self.cfg, self.fabrica)
             self.vigias.append(v)
         v.iniciar()
-        self._salvar_do_painel()
+        self._persistir()
         self.log.info("Live adicionada pelo painel: %s (%s %s)", nome, canal["plataforma"], canal["canal"])
         return nome
 
@@ -514,19 +533,44 @@ class Central:
             raise ValueError("live não encontrada")
         v.mudar_sensibilidade(nivel)
         if v.canal.get("do_painel"):
-            self._salvar_do_painel()
+            self._persistir()
 
     def remover(self, nome):
+        """Para de vigiar e lembra disso (continua parada ao reiniciar)."""
         with self.trava:
             v = next((x for x in self.vigias if x.canal["nome"] == nome), None)
             if not v:
                 raise ValueError("live não encontrada")
             self.vigias.remove(v)
-            do_painel = bool(v.canal.get("do_painel"))
-            if do_painel:
-                v.canal["removido"] = True  # some do arquivo, mas o crédito dos clipes antigos continua
+            v.canal["parado"] = True
         v.parar()
-        if do_painel:
-            self._salvar_do_painel()
-        self.log.info("Parei de vigiar %s%s", nome,
-                      "" if do_painel else " (está no config.yaml: volta quando reiniciar)")
+        self._persistir()
+        self.log.info("Parei de vigiar %s (fica parada até você clicar em 'Vigiar de novo')", nome)
+
+    def retomar(self, nome):
+        with self.trava:
+            if any(v.canal["nome"] == nome for v in self.vigias):
+                raise ValueError(f"{nome} já está sendo vigiada")
+            canal = next((c for c in self.cfg["canais"] if c["nome"] == nome and c.get("parado")
+                          and not c.get("removido")), None)
+            if not canal:
+                raise ValueError("live parada não encontrada")
+            canal.pop("parado", None)
+            v = Vigia(canal, self.cfg, self.fabrica)
+            self.vigias.append(v)
+        v.iniciar()
+        self._persistir()
+        self.log.info("Voltei a vigiar %s", nome)
+
+    def esquecer(self, nome):
+        """Tira de vez uma live parada que foi adicionada pelo painel."""
+        with self.trava:
+            canal = next((c for c in self.cfg["canais"] if c["nome"] == nome and c.get("parado")
+                          and not c.get("removido")), None)
+            if not canal:
+                raise ValueError("live parada não encontrada")
+            if not canal.get("do_painel"):
+                raise ValueError(f"{nome} está no config.yaml: pra tirar de vez, apague de lá")
+            canal["removido"] = True  # some do arquivo; o crédito dos clipes antigos continua
+        self._persistir()
+        self.log.info("Live %s tirada da lista", nome)
