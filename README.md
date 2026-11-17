@@ -266,7 +266,7 @@ Em cada clipe:
 - botões **Publicar · ⬇ Baixar · 📋 Copiar · Descartar · 🗑 Excluir**;
 - **✂ Ajustar o corte:** mude início e fim dentro do trecho gravado (dá pra marcar pelo ponto em que o vídeo está, ou somar 5 s antes/depois), troque o layout (split, blur, centro) e ligue/desligue a legenda; **Montar de novo** refaz o vídeo em segundos. Funciona mesmo depois que o replay da live já passou, porque cada clipe guarda o trecho bruto (`fonte.ts`) na pasta dele;
 - **"Por que esse clipe?"**, com o motivo do corte e a avaliação da IA;
-- depois de publicado: os links **abrir** e **abrir no Studio**.
+- depois de publicado: os links **abrir** e **abrir no Studio**, e os números do YouTube: **👁 views · 👍 likes · 💬 comentários** (atualizam sozinhos a cada 15 min; na aba Publicados tem o total de views e o botão **🔄 Atualizar números**). Pra isso a conta precisa ter sido autorizada com permissão de leitura: contas autorizadas antes dessa função precisam rodar `python -m vicopu auth-youtube <conta>` de novo, uma vez.
 
 **Seleção em lote:** clique na caixinha ✓ de cada clipe. **Shift+clique** marca um intervalo, e **Esc** limpa a seleção. Na barra roxa aparecem **Selecionar todos da aba · Publicar · Descartar · Excluir**. Clipes que não podem receber a ação são pulados, e o painel mostra o motivo.
 

@@ -35,6 +35,7 @@ def rodar(cfg):
     fabrica = Fabrica(cfg)
     central = Central(cfg, fabrica)
     central.iniciar()
+    fabrica.vigiar_numeros()  # views/likes/comentários dos publicados, a cada 15 min
     p = cfg["publicacao"]
     painel.iniciar(fabrica, central, p["painel_host"], p["painel_porta"])
     log = logging.getLogger("vicopu")

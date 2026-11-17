@@ -47,6 +47,8 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);m
 #paradas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:-14px 0 22px;font-size:12px;color:var(--sub)}
 .parada{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--borda);border-radius:999px;padding:3px 4px 3px 10px;color:var(--txt)}
 .parada .btn{padding:4px 8px;font-size:12px}
+.nums{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:13px;margin-top:8px}.nums b{color:var(--txt)}
+.nums .quando{color:var(--sub);font-size:11px}.nums .priv{background:var(--card2);border-radius:6px;padding:1px 6px;font-size:11px;color:var(--amarelo)}
 .live .info{color:var(--sub);font-size:12px}
 .btn{border:0;border-radius:9px;padding:8px 12px;font-weight:650;font-size:13px;cursor:pointer;color:var(--txt);background:var(--card2);
 display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
@@ -195,6 +197,12 @@ async function remontar(id){const ini=+$("#ai_"+id).value,fim=+$("#af_"+id).valu
 if(!(fim>ini)){toast("O fim precisa vir depois do início");return}
 await post("/remontar/"+id,JSON.stringify({inicio:ini,fim:fim,layout:$("#al_"+id).value,legenda:$("#ag_"+id).checked}));
 toast("🎬 Montando de novo… (uns segundos)");document.activeElement.blur();$("#grade")._ass=null;atualizar()}
+function fmt(n){return n>=1e6?(n/1e6).toFixed(1).replace(".0","")+" mi":n>=1e3?(n/1e3).toFixed(1).replace(".0","")+" mil":String(n)}
+function numeros(c){const n=c.numeros;if(n)return`<div class="nums"><span title="visualizações">👁 <b>${fmt(n.views)}</b></span><span title="likes">👍 <b>${fmt(n.likes)}</b></span><span title="comentários">💬 <b>${fmt(n.comentarios)}</b></span>${n.privacidade&&n.privacidade!=="public"?`<span class="priv">${esc(n.privacidade)}</span>`:""}<span class="quando">atualizado há ${ha(n.atualizado)}</span></div>`;
+if(c.numeros_erro)return`<div class="res">📊 ${esc(c.numeros_erro)}</div>`;
+return Object.values(c.resultados||{}).some(v=>/youtube\.com\/shorts\//.test(String(v)))?`<div class="res">📊 números do YouTube chegam em alguns minutos</div>`:""}
+async function atualizarNumeros(){toast("📊 Buscando números no YouTube…");const r=JSON.parse(await post("/numeros/atualizar"));
+const e=Object.values(r.erros||{});toast(e.length?"⚠ "+e[0]:`📊 ${r.ok} clipe(s) atualizado(s)`);$("#grade")._ass=null;atualizar()}
 function card(c){const st=c.status||"";const descartado=st.startsWith("descartado");
 const podeEditar=["pendente","pronto","erro"].includes(st)||descartado;
 const video=c.tem_video?`<video controls preload="metadata" src="/video/${c.id}?v=${c.versao||0}"></video>`:
@@ -214,6 +222,7 @@ ${["renderizando","publicando"].includes(st)?"":`<button class="btn fant perigo"
 ${podeEditar&&c.tem_video&&!(c.destinos&&c.destinos.length)?`<div class="res">⚠ Sem destino pra publicar: coloque <b>publicar_em</b> no canal <b>${esc(c.canal)}</b> no config.yaml e reinicie. Ou use Baixar/Copiar e poste na mão.</div>`:""}
 ${c.destinos&&c.destinos.length&&podeEditar?`<div class="res">Vai pra: ${esc(c.destinos.join(", "))}</div>`:""}
 ${c.resultados&&Object.keys(c.resultados).length?`<div class="res">${resultados(c.resultados)}</div>`:""}
+${st==="publicado"?numeros(c):""}
 ${podeEditar&&c.pode_ajustar&&c.corte?ajuste(c):""}
 ${previa(c)}
 <details><summary>Por que esse clipe?</summary><p>${esc(c.motivo)}</p>${c.motivo_ia&&c.motivo_ia!=="sem IA"?`<p><b>IA:</b> ${esc(c.motivo_ia)}</p>`:""}</details>
@@ -223,14 +232,16 @@ function filtrar(v){filtroCanal=v;localStorage.setItem("vicopu_canal",v);sel.cle
 function renderClipes(){const contagem=Object.fromEntries(ABAS.map(([k,,f])=>[k,clipesF().filter(c=>f(c.status||"")).length]));
 if(!$("#abas").contains(document.activeElement))$("#abas").innerHTML=ABAS.map(([k,nome])=>`<button class="aba ${k===aba?"ativa":""}" onclick="trocar('${k}')">${nome}<span class="n">${contagem[k]}</span></button>`).join("")+
 `<span class="filtro"><select onchange="filtrar(this.value)"><option value="">todas as lives</option>${[...new Set(estado.clipes.map(c=>c.canal))].sort().map(n=>`<option ${n===filtroCanal?"selected":""} value="${esc(n)}">${esc(n)}</option>`).join("")}</select></span>`+
-(contagem.descartados?`<span class="cresce"></span><button class="btn fant perigo" onclick="limpar()">🗑 Limpar descartados</button>`:"");
+(aba==="publicados"&&contagem.publicados?(()=>{const pub=clipesF().filter(c=>c.status==="publicado"&&c.numeros);const t=pub.reduce((a,c)=>a+c.numeros.views,0);
+return`<span class="cresce"></span>${pub.length?`<span style="color:var(--sub);font-size:13px">👁 <b style="color:var(--txt)">${fmt(t)}</b> views no total</span>`:""}<button class="btn" onclick="atualizarNumeros()">🔄 Atualizar números</button>`})():"")+
+(contagem.descartados&&aba!=="publicados"?`<span class="cresce"></span><button class="btn fant perigo" onclick="limpar()">🗑 Limpar descartados</button>`:"");
 const f=ABAS.find(a=>a[0]===aba)[2];const lista=clipesF().filter(c=>f(c.status||""));
 const grade=$("#grade");const foco=document.activeElement;
 const abertos=[...grade.querySelectorAll("details[open]")].map(d=>d.id).filter(x=>x);
 const reabrir=()=>abertos.forEach(i=>{const d=document.getElementById(i);if(d)d.open=true});
 // não refaz cards cujo título está sendo editado nem os vídeos tocando
 const vivos=new Set([...grade.querySelectorAll(".clip")].filter(el=>el.contains(foco)||[...el.querySelectorAll("video")].some(v=>!v.paused)).map(el=>el.dataset.id));
-const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+(c.descricao||"")+(c.credito||"")+JSON.stringify(c.resultados||{})+(c.versao||"")).join("|")+aba+filtroCanal;
+const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+(c.descricao||"")+(c.credito||"")+JSON.stringify(c.resultados||{})+(c.versao||"")+JSON.stringify(c.numeros||c.numeros_erro||"")).join("|")+aba+filtroCanal;
 if(grade._ass===assinatura)return;
 if(vivos.size&&lista.every(c=>grade.querySelector(`[data-id="${c.id}"]`))){
 lista.forEach(c=>{if(!vivos.has(c.id)){const el=grade.querySelector(`[data-id="${c.id}"]`);el.outerHTML=card(c)}});grade._ass=assinatura;reabrir();return}
@@ -398,6 +409,9 @@ def iniciar(fabrica, central, host, porta):
                 elif acao == "lote":
                     ids = [_seguro(i) for i in json.loads(corpo or "[]") if isinstance(i, str)]
                     r = fabrica.lote(alvo, ids)
+                    return self._enviar(200, json.dumps(r, ensure_ascii=False), "application/json; charset=utf-8")
+                elif acao == "numeros" and alvo == "atualizar":
+                    r = fabrica.atualizar_numeros()
                     return self._enviar(200, json.dumps(r, ensure_ascii=False), "application/json; charset=utf-8")
                 elif acao == "limpar" and alvo == "descartados":
                     fabrica.limpar_descartados()

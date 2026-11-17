@@ -3,6 +3,12 @@ import logging
 import os
 
 ESCOPOS = ["https://www.googleapis.com/auth/youtube.upload"]
+# pedido na autorização: upload + leitura (a leitura serve pra mostrar views/likes/comentários no painel)
+ESCOPOS_AUTH = ESCOPOS + ["https://www.googleapis.com/auth/youtube.readonly"]
+
+
+class SemPermissaoDeLeitura(RuntimeError):
+    """O token dessa conta foi criado só com permissão de upload."""
 log = logging.getLogger("publicar.youtube")
 
 
@@ -18,7 +24,7 @@ def autorizar(cfg, conta, porta=8090, abrir_navegador=True):
     if not os.path.exists(segredo):
         raise SystemExit(f"Não achei {segredo}. Baixe o JSON do cliente OAuth (tipo 'App para computador') "
                          f"no Google Cloud Console e salve nesse caminho.")
-    fluxo = InstalledAppFlow.from_client_secrets_file(segredo, ESCOPOS)
+    fluxo = InstalledAppFlow.from_client_secrets_file(segredo, ESCOPOS_AUTH)
     print(f"\nVai abrir o login do Google. Entre com a conta e ESCOLHA O CANAL '{conta}' onde os Shorts vão sair.\n"
           f"Se o navegador não abrir, copie o link que aparecer abaixo.\n"
           f"(Num servidor sem tela: use --sem-navegador e faça 'ssh -L {porta}:localhost:{porta} seu_servidor'.)\n")
@@ -61,3 +67,39 @@ def enviar(cfg, conta, video, titulo, descricao, tags, opcoes):
     url = f"https://youtube.com/shorts/{resp['id']}"
     log.info("Publicado no YouTube (%s): %s", conta, url)
     return url
+
+
+def estatisticas(cfg, conta, ids):
+    """Views, likes e comentários dos vídeos (até 50 por chamada; custa 1 unidade de cota)."""
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+
+    tok = caminho_token(cfg, conta)
+    if not os.path.exists(tok):
+        raise RuntimeError(f"conta YouTube '{conta}' não autorizada")
+    cred = Credentials.from_authorized_user_file(tok)  # usa os escopos que o token já tem
+    if cred.scopes and not any(s.endswith(("youtube.readonly", "/youtube", "youtube.force-ssl")) for s in cred.scopes):
+        raise SemPermissaoDeLeitura(conta)
+    if not cred.valid:
+        cred.refresh(Request())
+        with open(tok, "w") as f:
+            f.write(cred.to_json())
+    yt = build("youtube", "v3", credentials=cred, cache_discovery=False)
+    saida = {}
+    ids = list(dict.fromkeys(ids))
+    for i in range(0, len(ids), 50):
+        try:
+            resp = yt.videos().list(part="statistics,status", id=",".join(ids[i:i + 50])).execute()
+        except HttpError as e:
+            if getattr(e, "status_code", None) == 403 or "insufficient" in str(e).lower():
+                raise SemPermissaoDeLeitura(conta) from e
+            raise
+        for item in resp.get("items", []):
+            st = item.get("statistics", {})
+            saida[item["id"]] = {"views": int(st.get("viewCount", 0) or 0),
+                                 "likes": int(st.get("likeCount", 0) or 0),
+                                 "comentarios": int(st.get("commentCount", 0) or 0),
+                                 "privacidade": item.get("status", {}).get("privacyStatus", "")}
+    return saida

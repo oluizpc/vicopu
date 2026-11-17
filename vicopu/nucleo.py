@@ -369,6 +369,62 @@ class Fabrica:
         self.salvar(meta)
         self.log.info("%s -> %s", meta["id"], meta["resultados"])
 
+    def atualizar_numeros(self):
+        """Busca views/likes/comentários dos clipes publicados no YouTube (últimos 30 dias)."""
+        from .publicar import youtube
+        por_conta = {}
+        limite = time.time() - 30 * 86400
+        for m in self.listar():
+            if m.get("status") != "publicado" or m.get("criado", 0) < limite:
+                continue
+            for destino, res in (m.get("resultados") or {}).items():
+                ach = re.search(r"youtube\.com/shorts/([\w-]+)", str(res))
+                if destino.startswith("youtube:") and ach:
+                    por_conta.setdefault(destino.split(":", 1)[1], []).append((m["id"], ach.group(1)))
+        if not por_conta:
+            return {"ok": 0}
+        agora, erros, n = time.time(), {}, 0
+        for conta, pares in por_conta.items():
+            try:
+                stats = youtube.estatisticas(self.cfg, conta, [v for _, v in pares])
+                erro = None
+            except youtube.SemPermissaoDeLeitura:
+                stats, erro = {}, f"autorize de novo pra ver os números: python -m vicopu auth-youtube {conta}"
+            except Exception as e:  # noqa: BLE001
+                stats, erro = {}, f"não consegui buscar os números: {str(e)[:150]}"
+            if erro:
+                erros[conta] = erro
+            for cid, vid in pares:
+                try:
+                    meta = self.ler(cid)
+                    if meta.get("status") != "publicado":
+                        continue
+                    if vid in stats:
+                        meta["numeros"] = {**stats[vid], "atualizado": agora}
+                        meta.pop("numeros_erro", None)
+                        n += 1
+                    elif erro:
+                        meta["numeros_erro"] = erro
+                    else:
+                        meta["numeros_erro"] = "vídeo não encontrado (apagado?)"
+                    self.salvar(meta)
+                except FileNotFoundError:
+                    pass
+        if erros:
+            self.log.warning("Números do YouTube: %s", "; ".join(f"{k}: {v}" for k, v in erros.items()))
+        return {"ok": n, "erros": erros}
+
+    def vigiar_numeros(self, intervalo=15 * 60):
+        def laco():
+            time.sleep(30)
+            while True:
+                try:
+                    self.atualizar_numeros()
+                except Exception as e:  # noqa: BLE001
+                    self.log.debug("números: %s", e)
+                time.sleep(intervalo)
+        threading.Thread(target=laco, daemon=True, name="numeros").start()
+
     def destinos_atuais(self, meta):
         """Destinos do clipe; se o clipe não tinha nenhum, usa o publicar_em atual do canal no config."""
         if meta.get("destinos"):
