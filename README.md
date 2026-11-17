@@ -48,7 +48,11 @@ O `config.yaml`, a pasta `dados` e o `.venv` não vão pro git, então o `git pu
 
 Edite `canais:` no `config.yaml`. Cada canal tem a plataforma, o nome do canal, o layout e onde publicar.
 
-**Layout automático (`layout: auto`, o padrão):** quando a live entra no ar, o Claude olha a tela e acha a webcam do streamer. Depois, um ajuste fino encaixa a caixa na moldura da cam. Se achar, o canal usa o split; se não tiver cam, usa o blur. Ele repete a detecção a cada 15 minutos, porque o streamer pode mudar a cena. No painel, clique no nome do layout ao lado da live pra ver **onde ele achou a cam** (retângulo verde). Sem `ANTHROPIC_API_KEY`, o `auto` usa sempre o blur.
+**Layout automático (`layout: auto`, o padrão):** quando a live entra no ar, o VICOPU procura a webcam do streamer em duas etapas:
+1. **Grátis, no seu PC:** detecta o rosto que fica parado no mesmo lugar em vários quadros (a cam; personagens do jogo se mexem) e sai do rosto pra fora até achar a moldura.
+2. **Claude, só se precisar:** se não achar rosto (streamer de perfil, cam muito pequena), manda um quadro pro Claude apontar a cam, e um ajuste fino encaixa na moldura. Custa frações de centavo por detecção e precisa da `ANTHROPIC_API_KEY`. Pra nunca usar o Claude nisso, coloque `ia.camauto_claude: false`.
+
+Se achar a cam, o canal usa o split; se não, usa o blur. A detecção se repete a cada 15 minutos, porque o streamer pode mudar a cena. No painel, clique no nome do layout ao lado da live pra ver **onde ele achou a cam** (retângulo verde).
 
 **Calibrar a facecam na mão (layout `split` + `facecam`):** grave uns 30 s da live do streamer (ou baixe um VOD) e rode:
 
@@ -123,7 +127,7 @@ vicopu/
   detector.py  VIGIA: pico de chat + palavras-chave + volume → Momento
   corte.py     CORTA: layouts 9:16, legenda ASS estilo viral, render H.264/AAC
   ia.py        Whisper (transcrição) + Claude (juiz: publica? título? início/fim?)
-  camauto.py   acha a webcam sozinho (Claude vê o quadro + ajuste fino pelas bordas)
+  camauto.py   acha a webcam sozinho (rosto grátis via OpenCV; Claude como reserva)
   nucleo.py    junta tudo: Vigia por canal + Fábrica (fila de cortes)
   publicar/    PUBLICA: youtube.py, tiktok.py
   painel.py    painel web de revisão

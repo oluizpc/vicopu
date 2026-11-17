@@ -36,6 +36,7 @@ ia:
   usar_claude: true              # precisa de ANTHROPIC_API_KEY no ambiente
   modelo: claude-haiku-5-5       # rápido e barato; troque por claude-sonnet-5-5 se quiser mais capricho
   respeitar_descarte: true       # se o Claude disser que o trecho é fraco, não publica
+  camauto_claude: true           # layout auto: se a detecção grátis de rosto falhar, pergunta ao Claude
   instrucoes_extras: "Evite títulos com spoiler da história principal do GTA 6."
 
 publicacao:
@@ -68,7 +69,7 @@ canais:
     apelido: Fulano              # como o Claude chama o streamer no título
     plataforma: twitch           # twitch | kick | youtube | arquivo (teste)
     canal: nome_do_canal
-    layout: auto                 # o VICOPU acha a webcam sozinho (precisa da ANTHROPIC_API_KEY)
+    layout: auto                 # o VICOPU acha a webcam sozinho (rosto grátis; Claude só se precisar)
     # layout: split              # ou fixe na mão:
     # facecam: {x: 0.0, y: 0.0, w: 0.25, h: 0.30}   # posição da cam (frações da tela)
     hashtags: ["#gta6", "#gtavi"]

@@ -40,6 +40,114 @@ def extrair_quadros(ffmpeg, caminhos, n=5):
     return cinzas, jpeg
 
 
+def extrair_cinza_hd(ffmpeg, caminhos, n=5):
+    """Quadros em cinza 1280x720 (rostos pequenos de webcam precisam de mais resolução)."""
+    L, A = 1280, 720
+    saida = []
+    escolhidos = [caminhos[int(i * (len(caminhos) - 1) / max(1, n - 1))] for i in range(n)] if caminhos else []
+    for cam in escolhidos:
+        r = subprocess.run([ffmpeg, "-v", "error", "-i", cam, "-frames:v", "1", "-vf", f"scale={L}:{A}",
+                            "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True)
+        if len(r.stdout) == L * A:
+            saida.append(np.frombuffer(r.stdout, np.uint8).reshape(A, L))
+    return saida
+
+
+def achar_rosto_local(quadros):
+    """Detecção de rosto grátis, no próprio PC (OpenCV). Só aceita rosto que fica PARADO no mesmo lugar
+    em vários quadros: é assim que se diferencia a webcam de personagens do jogo, que se mexem.
+    Retorna (x, y, w, h) em frações, ou None."""
+    try:
+        import cv2
+    except ImportError:
+        log.info("OpenCV não instalado: pulando a detecção local de rosto.")
+        return None
+    if not quadros:
+        return None
+    A, L = quadros[0].shape
+    base = cv2.data.haarcascades
+    frontal = cv2.CascadeClassifier(base + "haarcascade_frontalface_default.xml")
+    perfil = cv2.CascadeClassifier(base + "haarcascade_profileface.xml")
+    achados = []  # (indice_quadro, x, y, w, h)
+    for i, q in enumerate(quadros):
+        q = cv2.equalizeHist(q)
+        caixas = list(frontal.detectMultiScale(q, 1.1, 6, minSize=(28, 28)))
+        caixas += list(perfil.detectMultiScale(q, 1.1, 6, minSize=(28, 28)))
+        espelho = cv2.flip(q, 1)  # o classificador de perfil só vê um lado; espelhando pega o outro
+        for (x, y, w, h) in perfil.detectMultiScale(espelho, 1.1, 6, minSize=(28, 28)):
+            caixas.append((L - x - w, y, w, h))
+        achados += [(i, int(x), int(y), int(w), int(h)) for (x, y, w, h) in caixas]
+    # agrupa rostos no mesmo lugar (centro a menos de 4% da tela) e conta em quantos quadros aparecem
+    melhor, melhor_qtd = None, 0
+    for _, x, y, w, h in achados:
+        cx, cy = x + w / 2, y + h / 2
+        grupo = [a for a in achados if abs(a[1] + a[3] / 2 - cx) < 0.04 * L and abs(a[2] + a[4] / 2 - cy) < 0.04 * A]
+        qtd = len({a[0] for a in grupo})
+        if qtd > melhor_qtd or (qtd == melhor_qtd and melhor and w > melhor[2]):
+            melhor_qtd = qtd
+            melhor = tuple(int(np.median([a[k] for a in grupo])) for k in (1, 2, 3, 4))
+    precisa = max(2, int(np.ceil(len(quadros) * 0.6)))
+    if not melhor or melhor_qtd < precisa:
+        return None
+    x, y, w, h = melhor
+    return {"x": x / L, "y": y / A, "w": w / L, "h": h / A}
+
+
+def moldura_a_partir_do_rosto(rosto, cinzas):
+    """Sai do rosto pra fora, em cada direção, até achar a moldura da webcam (linha reta e contínua).
+    Se não achar moldura num lado, usa o enquadramento típico de cam (ou a borda da tela)."""
+    tipica = caixa_em_volta_do_rosto(rosto)
+    if not cinzas:
+        return tipica
+    gx = np.mean([np.abs(np.diff(q, axis=1)) for q in cinzas], axis=0)
+    gy = np.mean([np.abs(np.diff(q, axis=0)) for q in cinzas], axis=0)
+    fx0, fx1 = rosto["x"] * LARG, (rosto["x"] + rosto["w"]) * LARG
+    fy0, fy1 = rosto["y"] * ALT, (rosto["y"] + rosto["h"]) * ALT
+    fw, fh = fx1 - fx0, fy1 - fy0
+    # mede cada linha candidata só num trecho que com certeza está dentro da cam (a faixa do rosto)
+    faixa_y = slice(max(0, int(fy0 - 0.3 * fh)), min(ALT, int(fy1 + 0.3 * fh)))
+    faixa_x = slice(max(0, int(fx0 - 0.3 * fw)), min(LARG - 1, int(fx1 + 0.3 * fw)))
+    limiar = 12.0
+    perfil_x = (gx[faixa_y, :] > limiar).mean(axis=0)
+    perfil_y = (gy[:, faixa_x] > limiar).mean(axis=1)
+
+    def procurar(perfil, de, ate, padrao, borda_tela):
+        de, ate = int(round(de)), int(round(ate))
+        passo = 1 if ate >= de else -1
+        idx = list(range(de, ate + passo, passo))
+        idx = [i for i in idx if 0 <= i < len(perfil)]
+        fortes = [i for i in idx if perfil[i] >= 0.8]  # linha quase inteira = moldura
+        if fortes:
+            return fortes[0]  # a primeira moldura saindo do rosto
+        return borda_tela if borda_tela is not None else padrao
+
+    tx0, ty0 = tipica["x"] * LARG, tipica["y"] * ALT
+    tx1, ty1 = (tipica["x"] + tipica["w"]) * LARG, (tipica["y"] + tipica["h"]) * ALT
+    folga_x, folga_y = 0.05 * LARG, 0.05 * ALT
+    x0 = procurar(perfil_x, fx0 - 0.15 * fw, tx0 - folga_x, tx0, 0 if tx0 - folga_x <= 0 else None)
+    x1 = procurar(perfil_x, fx1 + 0.15 * fw, tx1 + folga_x, tx1, LARG - 1 if tx1 + folga_x >= LARG - 1 else None)
+    y0 = procurar(perfil_y, fy0 - 0.15 * fh, ty0 - folga_y, ty0, 0 if ty0 - folga_y <= 0 else None)
+    y1 = procurar(perfil_y, fy1 + 0.15 * fh, ty1 + folga_y, ty1, ALT - 1 if ty1 + folga_y >= ALT - 1 else None)
+    # a diferença (diff) fica entre o pixel i e i+1: a área da cam começa em i+1 (esq/topo) e acaba em i (dir/baixo)
+    x0, y0 = (x0 + 1 if x0 > 0 else 0), (y0 + 1 if y0 > 0 else 0)
+    x0, y0, x1, y1 = x0 + 1, y0 + 1, x1 - 1, y1 - 1  # recua 1 px pra não pegar a linha da moldura
+    if x1 - x0 < fw or y1 - y0 < fh:
+        return tipica
+    return {"x": round(max(0, x0) / LARG, 4), "y": round(max(0, y0) / ALT, 4),
+            "w": round((x1 - max(0, x0)) / LARG, 4), "h": round((y1 - max(0, y0)) / ALT, 4)}
+
+
+def caixa_em_volta_do_rosto(rosto):
+    """Palpite da janela da webcam a partir do rosto (enquadramento típico de cam de streamer)."""
+    x = rosto["x"] - 1.3 * rosto["w"]
+    y = rosto["y"] - 0.9 * rosto["h"]
+    w = rosto["w"] * 3.6
+    h = rosto["h"] * 2.9
+    x, y = max(0.0, x), max(0.0, y)
+    w, h = min(w, 1.0 - x), min(h, 1.0 - y)
+    return {"x": x, "y": y, "w": w, "h": h}
+
+
 def perguntar_claude(jpeg, modelo):
     if not jpeg or not os.environ.get("ANTHROPIC_API_KEY"):
         return None
@@ -145,20 +253,35 @@ def detectar(cfg, caminhos_segmentos, nome_canal):
     """Retorna dict facecam (frações) ou None se não houver cam."""
     ff = cfg["geral"]["ffmpeg"]
     cinzas, jpeg = extrair_quadros(ff, caminhos_segmentos)
-    try:
-        resposta = perguntar_claude(jpeg, cfg["ia"]["modelo"])
-    except Exception as e:
-        log.warning("[%s] Claude não conseguiu analisar a cam (%s).", nome_canal, e)
-        resposta = None
-    if resposta is None:
-        log.warning("[%s] Detecção automática da cam precisa da ANTHROPIC_API_KEY. Usando blur.", nome_canal)
-        return None
-    if not resposta["tem_cam"]:
-        log.info("[%s] Nenhuma webcam na tela. Usando blur.", nome_canal)
-        return None
-    bruta = {k: resposta[k] for k in ("x", "y", "w", "h")}
+
+    # 1) grátis: detecção de rosto no próprio PC
+    rosto = achar_rosto_local(extrair_cinza_hd(ff, caminhos_segmentos))
+    if rosto:
+        final = moldura_a_partir_do_rosto(rosto, cinzas)
+        log.info("[%s] Cam encontrada (rosto local, grátis): %s", nome_canal, final)
+        destino = os.path.join(cfg["geral"]["pasta_trabalho"], "camauto", f"{nome_canal}.jpg")
+        salvar_previa(ff, caminhos_segmentos[len(caminhos_segmentos) // 2], final, destino)
+        return final
+    else:
+        # 2) não achou rosto parado (streamer de perfil, cam pequena...): pergunta ao Claude
+        if not cfg["ia"].get("camauto_claude", True):
+            log.info("[%s] Nenhum rosto achado localmente e o Claude está desligado. Usando blur.", nome_canal)
+            return None
+        try:
+            resposta = perguntar_claude(jpeg, cfg["ia"]["modelo"])
+        except Exception as e:
+            log.warning("[%s] Claude não conseguiu analisar a cam (%s).", nome_canal, e)
+            resposta = None
+        if resposta is None:
+            log.info("[%s] Nenhum rosto achado localmente (e sem ANTHROPIC_API_KEY pro Claude). Usando blur.",
+                     nome_canal)
+            return None
+        if not resposta["tem_cam"]:
+            log.info("[%s] Nenhuma webcam na tela. Usando blur.", nome_canal)
+            return None
+        bruta, fonte = {k: resposta[k] for k in ("x", "y", "w", "h")}, "Claude"
     final = refinar(bruta, cinzas)
-    log.info("[%s] Cam encontrada: %s (Claude: %s)", nome_canal, final, bruta)
+    log.info("[%s] Cam encontrada (%s): %s", nome_canal, fonte, final)
     destino = os.path.join(cfg["geral"]["pasta_trabalho"], "camauto", f"{nome_canal}.jpg")
     salvar_previa(ff, caminhos_segmentos[len(caminhos_segmentos) // 2], final, destino)
     return final

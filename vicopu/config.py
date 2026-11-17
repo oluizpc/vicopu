@@ -50,6 +50,7 @@ PADROES = {
         "usar_claude": True,
         "modelo": "claude-haiku-5-5",
         "respeitar_descarte": True,
+        "camauto_claude": True,  # se a detecção grátis de rosto não achar a cam, pergunta ao Claude
         "instrucoes_extras": "",
     },
     "publicacao": {
