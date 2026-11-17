@@ -155,7 +155,7 @@ class Fabrica:
             palavras = []
             if c["legenda"] or cfg["ia"]["usar_claude"]:
                 wav = corte.extrair_audio(ff, lista, ini, dur, pasta)
-                palavras = ia.transcrever(wav, c["modelo_whisper"], c["idioma"], c.get("whisper_dispositivo", "auto"))
+                palavras = ia.transcrever(wav, c["modelo_whisper"], canal.get("idioma", c["idioma"]), c.get("whisper_dispositivo", "auto"))
             decisao = ia.julgar(cfg, canal, palavras, m.amostra_chat, dur)
 
             meta = {"id": cid, "canal": canal["nome"], "criado": m.instante, "score": m.score,
