@@ -37,7 +37,14 @@ def rodar(cfg):
     central.iniciar()
     fabrica.vigiar_numeros()  # views/likes/comentários dos publicados, a cada 15 min
     p = cfg["publicacao"]
-    painel.iniciar(fabrica, central, p["painel_host"], p["painel_porta"])
+    host, senha = p["painel_host"], str(p.get("painel_senha") or "")
+    if host not in ("127.0.0.1", "localhost") and not senha:
+        logging.getLogger("vicopu").error(
+            "painel_host %s deixa o painel aberto pra rede, mas não tem painel_senha no config. "
+            "Por segurança o painel vai abrir só neste PC (127.0.0.1). Coloque uma senha e reinicie.", host)
+        host = "127.0.0.1"
+    painel.iniciar(fabrica, central, host, p["painel_porta"], senha)
+    p = {**p, "painel_host": host}
     log = logging.getLogger("vicopu")
     extras = sum(1 for v in central.lista() if v.canal.get("do_painel"))
     paradas = [c["nome"] for c in central.paradas()]

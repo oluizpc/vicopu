@@ -293,7 +293,10 @@ def _seguro(nome):
     return re.sub(r"[^\w\-]", "", nome)
 
 
-def iniciar(fabrica, central, host, porta):
+def iniciar(fabrica, central, host, porta, senha=""):
+    import base64
+    import hmac
+    esperado = ("Basic " + base64.b64encode(f"vicopu:{senha}".encode()).decode()) if senha else None
 
     def estado():
         lives = [{"nome": v.canal["nome"], "plataforma": v.canal["plataforma"], "no_ar": v.no_ar(),
@@ -333,7 +336,20 @@ def iniciar(fabrica, central, host, porta):
             except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
                 pass  # o navegador cancelou (normal com vídeo: ele pede pedaços e desiste de alguns)
 
+        def _liberado(self):
+            if not esperado:
+                return True
+            if hmac.compare_digest(self.headers.get("Authorization", ""), esperado):
+                return True
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="VICOPU", charset="UTF-8"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return False
+
         def do_GET(self):
+            if not self._liberado():
+                return
             caminho = urllib.parse.urlparse(self.path).path
             if caminho.startswith("/video/"):
                 return self._video(_seguro(urllib.parse.unquote(caminho[7:])))
@@ -354,6 +370,8 @@ def iniciar(fabrica, central, host, porta):
             return self._enviar(404, "?", "text/plain")
 
         def do_POST(self):
+            if not self._liberado():
+                return
             tam = int(self.headers.get("Content-Length") or 0)
             corpo = self.rfile.read(tam).decode("utf-8", errors="ignore") if tam else ""
             partes = urllib.parse.urlparse(self.path).path.strip("/").split("/", 1)

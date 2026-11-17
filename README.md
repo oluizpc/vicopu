@@ -274,6 +274,28 @@ Em cada clipe:
 
 Por segurança, o painel só abre no próprio PC (`painel_host: 127.0.0.1`).
 
+### 6.1 Ver o painel de longe (trabalho, celular)
+
+O jeito mais simples e seguro é o **Tailscale** (grátis): ele cria uma rede particular entre os seus aparelhos, sem abrir porta no roteador.
+1. Instale o Tailscale no **PC** e no **celular** (e/ou no PC do trabalho) e entre com a mesma conta.
+2. No app do Tailscale do PC, copie o IP dele (começa com `100.`).
+3. No `config.yaml`:
+   ```yaml
+   publicacao:
+     painel_host: 0.0.0.0
+     painel_senha: "uma-senha-sua"
+     painel_link: "http://100.x.y.z:8787"   # o IP do PC no Tailscale
+   ```
+4. Reinicie o VICOPU. Do celular, com o Tailscale ligado, abra `http://100.x.y.z:8787`. Usuário **vicopu**, senha a do config.
+
+Sem `painel_senha`, o VICOPU se recusa a abrir o painel pra rede (fica só no 127.0.0.1). Na primeira vez, o Windows pode perguntar se libera o Python no firewall: libere em **Redes privadas**.
+
+### 6.2 Aviso no celular quando cair clipe
+
+Com o app **ntfy** (grátis, sem cadastro), o celular apita a cada clipe novo pra revisar (e quando uma publicação falhar). Tocar no aviso abre o painel (`painel_link`).
+1. Instale o **ntfy** no celular, toque em **+** e assine um tópico com nome difícil de adivinhar, ex.: `vicopu-luiz-8f3k2`.
+2. No `config.yaml`: `publicacao: { aviso_ntfy: "vicopu-luiz-8f3k2" }` e reinicie.
+
 ---
 
 ## 7. Publicar no YouTube
@@ -564,7 +586,10 @@ Tudo é opcional, exceto `canais`. O que você não colocar usa o padrão.
 | Opção | Padrão | O que faz |
 |---|---|---|
 | `modo` | `revisao` | `revisao` (você aprova), `auto` (publica sozinho) ou `nenhum` (só gera) |
-| `painel_host` / `painel_porta` | `127.0.0.1` / `8787` | endereço do painel |
+| `painel_host` / `painel_porta` | `127.0.0.1` / `8787` | endereço do painel (`0.0.0.0` pra acessar de outro aparelho) |
+| `painel_senha` | `""` | senha do painel (usuário `vicopu`); obrigatória fora do 127.0.0.1 |
+| `painel_link` | `""` | endereço do painel visto de fora; o aviso do celular abre ele |
+| `aviso_ntfy` | `""` | tópico do app ntfy pra avisar no celular |
 | `credito` | `🎮 Corte da live de {streamer}. Live completa: {link}` | crédito na descrição do YouTube |
 | `credito_tiktok` | `🎮 Live: {link_curto}` | crédito na legenda do TikTok |
 

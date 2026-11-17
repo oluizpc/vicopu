@@ -44,6 +44,9 @@ ia:
 publicacao:
   modo: revisao                  # auto = publica sozinho · revisao = aprova no painel · nenhum = só gera
   painel_host: 127.0.0.1         # 0.0.0.0 para acessar de fora (coloque senha/VPN na frente!)
+  # painel_senha: "troque-isto"     # obrigatória com painel_host 0.0.0.0 (usuário: vicopu)
+  # painel_link: "http://100.x.y.z:8787"   # IP do PC no Tailscale (o aviso do celular abre ele)
+  # aviso_ntfy: "vicopu-seu-topico-secreto"  # app ntfy no celular: avisa quando cair clipe
   painel_porta: 8787
   credito: "🎮 Corte da live de {streamer}. Live completa: {link}"   # vai na descrição do YouTube
   credito_tiktok: "🎮 Live: {link_curto}"                            # vai na legenda do TikTok

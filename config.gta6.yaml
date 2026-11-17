@@ -20,6 +20,10 @@ ia:
     Prefira a reação do streamer, momentos engraçados, caos e jogabilidade.
 
 publicacao:
+  # painel_host: 0.0.0.0             # pra abrir o painel do celular/trabalho (com Tailscale)
+  # painel_senha: "troque-isto"     # obrigatória com painel_host 0.0.0.0 (usuário: vicopu)
+  # painel_link: "http://100.x.y.z:8787"   # IP do PC no Tailscale (o aviso do celular abre ele)
+  # aviso_ntfy: "vicopu-seu-topico-secreto"  # app ntfy no celular: avisa quando cair clipe
   modo: revisao                  # você aprova no painel antes de subir
   credito: "🎮 Corte da live de {streamer}. Live completa: {link}"
   credito_tiktok: "🎮 Live: {link_curto}"

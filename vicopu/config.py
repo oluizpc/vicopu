@@ -59,8 +59,11 @@ PADROES = {
     },
     "publicacao": {
         "modo": "revisao",  # auto | revisao | nenhum
-        "painel_host": "127.0.0.1",
+        "painel_host": "127.0.0.1",  # 0.0.0.0 = acessar de outro aparelho (exige painel_senha)
         "painel_porta": 8787,
+        "painel_senha": "",          # senha do painel (usuário: vicopu). Obrigatória fora do 127.0.0.1
+        "painel_link": "",           # endereço do painel visto de fora (ex.: http://100.x.y.z:8787), usado no aviso do celular
+        "aviso_ntfy": "",            # tópico do app ntfy pra avisar no celular quando cair clipe (ex.: vicopu-luiz-8f3k2)
         # crédito do streamer em todo clipe. {streamer}, {link} e {link_curto} são trocados sozinhos
         "credito": "🎮 Corte da live de {streamer}. Live completa: {link}",
         "credito_tiktok": "🎮 Live: {link_curto}",

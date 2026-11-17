@@ -334,6 +334,9 @@ class Fabrica:
             meta["status"] = "pendente" if modo == "revisao" else "pronto"
             self.salvar(meta)
             self.log.info("Clipe pronto (%s): %s | %s", meta["status"], cid, meta["titulo"])
+            from . import avisos
+            avisos.enviar(cfg, f"🎬 Clipe novo: {canal.get('apelido', canal['nome'])}",
+                          f"{meta['titulo']}\nIA {meta.get('nota_ia', '?')}/10 · {meta['duracao']:.0f} s")
 
     def remontar(self, cid, inicio, fim, layout, legenda, cam_do_canal=None):
         """Ajusta o corte (início/fim dentro da janela gravada), o layout e a legenda, e monta de novo."""
@@ -410,6 +413,10 @@ class Fabrica:
         erros = [v for v in meta["resultados"].values() if str(v).startswith("ERRO")]
         meta["status"] = "erro" if erros and len(erros) == len(meta["resultados"]) else "publicado"
         self.salvar(meta)
+        if erros:
+            from . import avisos
+            avisos.enviar(self.cfg, "⚠ Falha ao publicar", f"{meta.get('titulo', meta['id'])}\n{erros[0][:200]}",
+                          tags="warning", prioridade=4)
         self.log.info("%s -> %s", meta["id"], meta["resultados"])
 
     def atualizar_numeros(self):
