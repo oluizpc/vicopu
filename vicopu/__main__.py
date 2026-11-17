@@ -1,0 +1,98 @@
+"""VICOPU: vigia, corta e publica.
+
+Uso:
+  python -m vicopu rodar                     # liga tudo (vigias + cortes + painel)
+  python -m vicopu auth-youtube <conta>      # autoriza um canal do YouTube (uma vez)
+  python -m vicopu auth-tiktok <conta>       # autoriza uma conta do TikTok (uma vez)
+  python -m vicopu testar-layout <canal> <video.mp4>   # gera 20 s de teste p/ calibrar a facecam
+"""
+import argparse
+import logging
+import os
+import shutil
+import sys
+import time
+
+from . import config as cfgmod
+
+
+def rodar(cfg):
+    from . import painel
+    from .nucleo import Fabrica, Vigia
+
+    if not shutil.which(cfg["geral"]["ffmpeg"]):
+        sys.exit("ffmpeg não encontrado. Instale e deixe no PATH (ou ajuste geral.ffmpeg no config).")
+    if not cfg["canais"]:
+        sys.exit("Nenhum canal no config. Adicione em 'canais:'.")
+    fabrica = Fabrica(cfg)
+    vigias = [Vigia(c, cfg, fabrica) for c in cfg["canais"]]
+    for v in vigias:
+        v.iniciar()
+    p = cfg["publicacao"]
+    painel.iniciar(fabrica, vigias, p["painel_host"], p["painel_porta"])
+    log = logging.getLogger("vicopu")
+    log.info("VICOPU no ar: %d canal(is). Painel em http://%s:%s  (Ctrl+C para sair)",
+             len(vigias), p["painel_host"], p["painel_porta"])
+    try:
+        while True:
+            for v in vigias:
+                v.detector.tick()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        log.info("Desligando...")
+        for v in vigias:
+            v.parar()
+
+
+def testar_layout(cfg, nome, video):
+    from . import corte
+
+    canal = next((c for c in cfg["canais"] if c["nome"] == nome), None)
+    if not canal:
+        sys.exit(f"Canal '{nome}' não está no config.")
+    pasta = os.path.join(cfg["geral"]["pasta_trabalho"], "teste_layout", nome)
+    os.makedirs(pasta, exist_ok=True)
+
+    class S:
+        caminho = os.path.abspath(video)
+    lista = corte.escrever_lista([S], pasta)
+    saida = corte.renderizar(cfg["geral"]["ffmpeg"], shutil.which("ffprobe") or "ffprobe", lista, 0, 20,
+                             pasta, canal["layout"], canal.get("facecam"), canal.get("centro_x", 0.5),
+                             None, cfg["corte"]["fps"], cfg["corte"]["crf"])
+    print(f"Teste salvo em {saida}. Ajuste 'facecam' (x, y, w, h em frações da tela) até a cam ficar certinha.")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="vicopu", description="VICOPU: vigia, corta e publica.")
+    ap.add_argument("-c", "--config", default="config.yaml")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("rodar")
+    a = sub.add_parser("auth-youtube")
+    a.add_argument("conta")
+    a.add_argument("--porta", type=int, default=8090)
+    b = sub.add_parser("auth-tiktok")
+    b.add_argument("conta")
+    t = sub.add_parser("testar-layout")
+    t.add_argument("canal")
+    t.add_argument("video")
+    args = ap.parse_args()
+
+    cfg = cfgmod.carregar(args.config)
+    logging.basicConfig(level=cfg["geral"]["log_nivel"],
+                        format="%(asctime)s %(levelname)-7s [%(name)s] %(message)s", datefmt="%H:%M:%S")
+    for barulhento in ("httpx", "httpx2", "httpcore", "huggingface_hub", "faster_whisper", "googleapiclient"):
+        logging.getLogger(barulhento).setLevel(logging.WARNING)  # esconde o log interno das bibliotecas
+    if args.cmd == "rodar":
+        rodar(cfg)
+    elif args.cmd == "auth-youtube":
+        from .publicar import youtube
+        youtube.autorizar(cfg, args.conta, args.porta)
+    elif args.cmd == "auth-tiktok":
+        from .publicar import tiktok
+        tiktok.autorizar(cfg, args.conta)
+    elif args.cmd == "testar-layout":
+        testar_layout(cfg, args.canal, args.video)
+
+
+if __name__ == "__main__":
+    main()

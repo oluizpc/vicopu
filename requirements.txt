@@ -1,0 +1,20 @@
+# Núcleo
+PyYAML>=6.0
+numpy
+requests>=2.31
+streamlink>=7.0          # captura Twitch / Kick / YouTube
+websocket-client>=1.7    # chat da Kick
+
+# Chat do YouTube
+yt-dlp
+
+# IA (legenda + juiz)
+faster-whisper>=1.0
+anthropic>=0.40
+
+# Publicação no YouTube
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+
+# Opcional, mas recomendado: ajuda a passar pela proteção (Cloudflare) da Kick
+curl_cffi

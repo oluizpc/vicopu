@@ -1,0 +1,91 @@
+# ============================================================
+#  VICOPU: configuração. Copie para config.yaml e edite.
+#  Valores ${ASSIM} vêm de variáveis de ambiente.
+# ============================================================
+
+geral:
+  pasta_trabalho: ./dados        # replay, clipes e credenciais ficam aqui
+  buffer_minutos: 5              # quanto da live fica guardado pra cortar
+  segundos_por_segmento: 4
+  workers_corte: 2               # cortes renderizando ao mesmo tempo (CPU!)
+  qualidade_stream: best         # ou 720p60, 1080p60...
+  log_nivel: INFO
+
+deteccao:
+  aquecimento_segundos: 90       # tempo pra aprender o "normal" do chat antes de cortar
+  janela_segundos: 10
+  multiplicador_pico: 3.0        # chat 3x acima do normal = pico
+  minimo_mensagens_janela: 8     # chat pequeno? diminua
+  cooldown_segundos: 90          # intervalo mínimo entre cortes do mesmo canal
+  limiar_score: 1.0              # menor = mais cortes; maior = só momentos muito fortes
+  usar_audio: true               # grito/explosão também conta
+  audio_salto_db: 6
+  # palavras_chave: [kkkk, clipa, ...]   # já vem uma lista boa por padrão
+
+corte:
+  antes_segundos: 35             # quanto pegar ANTES do pico do chat (a reação vem depois do lance)
+  depois_segundos: 12
+  duracao_maxima: 59
+  fps: 30
+  layout_padrao: auto            # auto (acha a cam sozinho) | split | blur | centro
+  legenda: true
+  modelo_whisper: small          # tiny/base (rápido) · small (equilíbrio) · medium (melhor, pesado)
+  idioma: pt
+
+ia:
+  usar_claude: true              # precisa de ANTHROPIC_API_KEY no ambiente
+  modelo: claude-haiku-5-5       # rápido e barato; troque por claude-sonnet-5-5 se quiser mais capricho
+  respeitar_descarte: true       # se o Claude disser que o trecho é fraco, não publica
+  instrucoes_extras: "Evite títulos com spoiler da história principal do GTA 6."
+
+publicacao:
+  modo: revisao                  # auto = publica sozinho · revisao = aprova no painel · nenhum = só gera
+  painel_host: 127.0.0.1         # 0.0.0.0 para acessar de fora (coloque senha/VPN na frente!)
+  painel_porta: 8787
+
+# ---------- Apps (uma vez só) ----------
+youtube_app:
+  client_secrets: ./credenciais/youtube_client_secret.json
+
+tiktok_app:
+  client_key: ${TIKTOK_CLIENT_KEY}
+  client_secret: ${TIKTOK_CLIENT_SECRET}
+  redirect_uri: https://seusite.com/tiktok/callback
+
+# ---------- Contas onde publicar ----------
+contas:
+  youtube:
+    cortes_principal:
+      privacidade: public        # public | unlisted | private
+  tiktok:
+    cortes_tiktok:
+      modo: rascunho             # rascunho (cai no app pra você postar) | direto
+      privacidade: PUBLIC_TO_EVERYONE   # só vale no modo direto e com o app auditado
+
+# ---------- Lives vigiadas ----------
+canais:
+  - nome: streamer_twitch
+    apelido: Fulano              # como o Claude chama o streamer no título
+    plataforma: twitch           # twitch | kick | youtube | arquivo (teste)
+    canal: nome_do_canal
+    layout: auto                 # o VICOPU acha a webcam sozinho (precisa da ANTHROPIC_API_KEY)
+    # layout: split              # ou fixe na mão:
+    # facecam: {x: 0.0, y: 0.0, w: 0.25, h: 0.30}   # posição da cam (frações da tela)
+    hashtags: ["#gta6", "#gtavi"]
+    publicar_em: [youtube:cortes_principal, tiktok:cortes_tiktok]
+
+  - nome: streamer_kick
+    plataforma: kick
+    canal: nome_do_canal
+    layout: blur                 # jogo inteiro no meio, fundo desfocado
+    hashtags: ["#gta6"]
+    publicar_em: [youtube:cortes_principal]
+    # kick_chatroom_id: 123456   # use se a Kick bloquear a busca automática do chat
+
+  - nome: streamer_youtube
+    plataforma: youtube
+    canal: "@handle_do_canal"
+    layout: centro
+    centro_x: 0.5                # 0 = esquerda, 1 = direita (onde fica a ação)
+    hashtags: ["#gta6"]
+    publicar_em: [tiktok:cortes_tiktok]
