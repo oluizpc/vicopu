@@ -142,7 +142,20 @@ class ChatKick(LeitorChat):
         k = self.cfg["kick"]
         url = (f"wss://ws-{k['pusher_cluster']}.pusher.com/app/{k['pusher_key']}"
                f"?protocol=7&client=js&version=8.4.0&flash=false")
-        ws = websocket.create_connection(url, timeout=120)
+        ws = websocket.create_connection(url, timeout=120, header=[
+            "Origin: https://kick.com",
+            "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"])
+        # Espera o Pusher confirmar a conexão antes de entrar na sala (assinar cedo demais
+        # fazia a primeira conexão cair logo depois de conectar).
+        fim = time.time() + 15
+        while time.time() < fim:
+            try:
+                primeira = json.loads(ws.recv() or "{}")
+            except ValueError:
+                continue
+            if isinstance(primeira, dict) and primeira.get("event") == "pusher:connection_established":
+                break
         ws.send(json.dumps({"event": "pusher:subscribe",
                             "data": {"auth": "", "channel": f"chatrooms.{sala}.v2"}}))
         self.log.info("Chat da Kick conectado (sala %s)", sala)
