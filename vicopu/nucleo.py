@@ -232,6 +232,15 @@ class Fabrica:
         if meta["status"] in ("pendente", "pronto", "erro"):
             self.pool.submit(self.publicar, meta, titulo)
 
+    def mudar_titulo(self, cid, titulo):
+        meta = self.ler(cid)
+        if meta.get("status") not in ("pendente", "pronto", "erro"):
+            raise RuntimeError("esse clipe não pode mais ser editado")
+        if not titulo:
+            raise ValueError("o título não pode ficar vazio")
+        meta["titulo"] = titulo[:100]
+        self.salvar(meta)
+
     def excluir(self, cid):
         """Apaga o clipe do painel e a pasta dele do disco (vídeo, legenda, áudio...)."""
         meta = self.ler(cid)
