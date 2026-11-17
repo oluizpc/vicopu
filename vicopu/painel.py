@@ -24,14 +24,17 @@ video{{width:100%;aspect-ratio:9/16;background:#000;border-radius:8px}}
 input{{width:100%;box-sizing:border-box;background:#0e0e10;color:#eee;border:1px solid #333;border-radius:6px;padding:6px;margin:6px 0}}
 button{{border:0;border-radius:6px;padding:7px 12px;font-weight:600;cursor:pointer}}
 .ok{{background:#17c964}} .no{{background:#333;color:#ddd}} .cut{{background:#9147ff;color:#fff}}
+.lixo{{background:transparent;color:#999;float:right;padding:2px 6px;font-size:16px}}
+.lixo:hover{{color:#f31260}} .topo{{display:flex;gap:10px;align-items:center;margin-bottom:12px}}
 .tag{{display:inline-block;border-radius:4px;padding:2px 6px;font-size:12px;color:#000}}
 small{{color:#999;display:block;margin-top:4px;word-break:break-word}}
 </style></head><body>
 <h1>VICOPU</h1><div class="sub">vigia · corta · publica: modo <b>{modo}</b></div>
 <div class="lives">{lives}</div>
+<div class="topo"><b>Clipes</b> <button class="no" onclick="if(confirm('Apagar do disco TODOS os clipes descartados?'))acao('/limpar/descartados')">🗑 Limpar descartados</button></div>
 <div class="grade">{cards}</div>
 <script>
-async function acao(url, corpo){{await fetch(url,{{method:'POST',body:corpo||''}});location.reload()}}
+async function acao(url, corpo){{const r=await fetch(url,{{method:'POST',body:corpo||''}});if(!r.ok)alert(await r.text());location.reload()}}
 setTimeout(()=>location.reload(), 20000);
 </script></body></html>"""
 
@@ -82,8 +85,11 @@ def iniciar(fabrica, vigias, host, porta):
                          if os.path.exists(m.get("video", "")) else "")
                 res = "<br>".join(f"{html.escape(k)}: {html.escape(str(v))}"
                                   for k, v in (m.get("resultados") or {}).items())
+                lixo = ("" if st in ("renderizando", "publicando") else
+                        f'<button class="lixo" title="Excluir clipe (apaga do disco)" '
+                        f'onclick="if(confirm(\'Excluir este clipe do painel e do disco?\'))acao(\'/excluir/{m["id"]}\')">🗑</button>')
                 cards.append(
-                    f'<div class="card">{video}'
+                    f'<div class="card">{video}{lixo}'
                     f'<span class="tag" style="background:{CORES.get(st, "#999")}">{st}</span> '
                     f'<b>{html.escape(m["canal"])}</b>'
                     f'<input id="t_{m["id"]}" value="{html.escape(m.get("titulo", ""))}">{botoes}'
@@ -107,10 +113,16 @@ def iniciar(fabrica, vigias, host, porta):
                     fabrica.publicar_async(alvo, corpo.strip() or None)
                 elif acao == "descartar":
                     fabrica.descartar(alvo)
+                elif acao == "excluir":
+                    fabrica.excluir(alvo)
+                elif acao == "limpar" and alvo == "descartados":
+                    fabrica.limpar_descartados()
                 else:
                     return self._enviar(404, "?")
             except FileNotFoundError:
                 return self._enviar(404, "clipe não encontrado")
+            except RuntimeError as e:
+                return self._enviar(409, str(e), "text/plain; charset=utf-8")
             self._enviar(200, "ok", "text/plain")
 
         def _video(self, cid):

@@ -213,6 +213,23 @@ class Fabrica:
         if meta["status"] in ("pendente", "pronto", "erro"):
             self.pool.submit(self.publicar, meta, titulo)
 
+    def excluir(self, cid):
+        """Apaga o clipe do painel e a pasta dele do disco (vídeo, legenda, áudio...)."""
+        meta = self.ler(cid)
+        if meta.get("status") in ("renderizando", "publicando"):
+            raise RuntimeError("clipe ainda em andamento; espere terminar")
+        shutil.rmtree(os.path.join(self.pasta, os.path.basename(cid)), ignore_errors=True)
+        self.log.info("Clipe excluído: %s", cid)
+
+    def limpar_descartados(self):
+        n = 0
+        for m in self.listar():
+            if m.get("status") in ("descartado", "descartado_ia"):
+                shutil.rmtree(os.path.join(self.pasta, m["id"]), ignore_errors=True)
+                n += 1
+        self.log.info("Limpeza: %d clipe(s) descartado(s) apagado(s).", n)
+        return n
+
     def descartar(self, cid):
         meta = self.ler(cid)
         meta["status"] = "descartado"
