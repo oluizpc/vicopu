@@ -64,6 +64,11 @@ padding:8px;font-family:inherit;font-weight:600;font-size:13px;line-height:1.35}
 .acoes{display:flex;gap:6px;flex-wrap:wrap}
 details{font-size:12px;color:var(--sub)}summary{cursor:pointer;user-select:none}details p{margin:6px 0 0}
 .res{font-size:12px;color:var(--sub);word-break:break-word}
+.post{background:var(--bg);border:1px solid var(--borda);border-radius:9px;padding:8px 9px;font-size:12px;line-height:1.45;
+display:flex;flex-direction:column;gap:6px;word-break:break-word}
+.post .rot{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--sub);font-weight:700}
+.post .desc{color:var(--txt)}.post .cred{color:#c4b5fd}.post .tags{color:#93c5fd}
+.post details summary{color:var(--sub)}
 .vazia{color:var(--sub);padding:40px;text-align:center;border:1px dashed var(--borda);border-radius:16px}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(30px);opacity:0;transition:.25s;
 background:var(--txt);color:#111;padding:10px 16px;border-radius:10px;font-weight:700;z-index:9}
@@ -106,6 +111,13 @@ async function post(url,corpo){const r=await fetch(url,{method:"POST",body:corpo
 function ha(seg){const d=Math.max(0,Date.now()/1000-seg);if(d<60)return"agora";if(d<3600)return Math.floor(d/60)+" min";
 if(d<86400)return Math.floor(d/3600)+" h";return Math.floor(d/86400)+" d"}
 function nota(n){if(n==null)return"";const c=n>=7?"boa":n>=4?"media":"ruim";return`<span class="nota ${c}">IA ${n}/10</span>`}
+function tagsDe(c){return[...new Set([...(c.hashtags_fixas||[]),...(c.hashtags||[])].map(t=>t.startsWith("#")?t:"#"+t))]}
+function previa(c){if(!c.tem_video)return"";const tags=tagsDe(c).join(" ");
+const curto=(c.credito_tiktok||"");const tiktok=[c.titulo,curto,tags].filter(x=>x).join(" ");
+return`<div class="post"><div class="rot">Descrição no YouTube</div>
+${c.descricao?`<div class="desc">${esc(c.descricao)}</div>`:""}${c.credito?`<div class="cred">${esc(c.credito)}</div>`:""}
+${tags?`<div class="tags">${esc(tags)}</div>`:""}
+<details><summary>Legenda no TikTok</summary><div class="desc" style="margin-top:4px">${esc(tiktok)}</div></details></div>`}
 function resultados(r){return Object.entries(r||{}).map(([k,v])=>{v=String(v);if(v.startsWith("http")){
 const m=v.match(/youtube\.com\/shorts\/([\w-]+)/);return`${esc(k)}: <a href="${esc(v)}" target="_blank">abrir</a>`+
 (m?` · <a href="https://studio.youtube.com/video/${m[1]}/edit" target="_blank">abrir no Studio</a>`:"")}return`${esc(k)}: ${esc(v)}`}).join("<br>")}
@@ -134,7 +146,7 @@ ${["renderizando","publicando"].includes(st)?"":`<button class="btn fant perigo"
 ${podeEditar&&c.tem_video&&!(c.destinos&&c.destinos.length)?`<div class="res">⚠ Sem destino pra publicar: coloque <b>publicar_em</b> no canal <b>${esc(c.canal)}</b> no config.yaml e reinicie. Ou use Baixar/Copiar e poste na mão.</div>`:""}
 ${c.destinos&&c.destinos.length&&podeEditar?`<div class="res">Vai pra: ${esc(c.destinos.join(", "))}</div>`:""}
 ${c.resultados&&Object.keys(c.resultados).length?`<div class="res">${resultados(c.resultados)}</div>`:""}
-${c.credito?`<div class="res">${esc(c.credito)}</div>`:""}
+${previa(c)}
 <details><summary>Por que esse clipe?</summary><p>${esc(c.motivo)}</p>${c.motivo_ia&&c.motivo_ia!=="sem IA"?`<p><b>IA:</b> ${esc(c.motivo_ia)}</p>`:""}</details>
 </div></div>`}
 function renderClipes(){const contagem=Object.fromEntries(ABAS.map(([k,,f])=>[k,estado.clipes.filter(c=>f(c.status||"")).length]));
@@ -144,7 +156,7 @@ const f=ABAS.find(a=>a[0]===aba)[2];const lista=estado.clipes.filter(c=>f(c.stat
 const grade=$("#grade");const foco=document.activeElement;
 // não refaz cards cujo título está sendo editado nem os vídeos tocando
 const vivos=new Set([...grade.querySelectorAll(".clip")].filter(el=>el.contains(foco)||[...el.querySelectorAll("video")].some(v=>!v.paused)).map(el=>el.dataset.id));
-const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+JSON.stringify(c.resultados||{})).join("|")+aba;
+const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+(c.descricao||"")+(c.credito||"")+JSON.stringify(c.resultados||{})).join("|")+aba;
 if(grade._ass===assinatura)return;
 if(vivos.size&&lista.every(c=>grade.querySelector(`[data-id="${c.id}"]`))){
 lista.forEach(c=>{if(!vivos.has(c.id)){const el=grade.querySelector(`[data-id="${c.id}"]`);el.outerHTML=card(c)}});grade._ass=assinatura;return}
@@ -164,10 +176,10 @@ async function publicar(id){const t=$("#t_"+id).value.trim();await post("/aprova
 async function descartar(id){await post("/descartar/"+id);toast("Descartado");atualizar()}
 async function excluir(id){if(!confirm("Excluir este clipe do painel e do disco?"))return;await post("/excluir/"+id);toast("Excluído");atualizar()}
 async function limpar(){if(!confirm("Apagar do disco TODOS os clipes descartados?"))return;await post("/limpar/descartados");toast("Descartados apagados");atualizar()}
-async function copiar(id){const c=estado.clipes.find(x=>x.id===id);const tags=[...(c.hashtags_fixas||[]),...(c.hashtags||[])]
-.map(t=>t.startsWith("#")?t:"#"+t);const txt=[$("#t_"+id).value.trim(),c.credito||"",[...new Set(tags)].join(" ")].filter(x=>x).join("\n\n");
+async function copiar(id){const c=estado.clipes.find(x=>x.id===id);
+const txt=[$("#t_"+id).value.trim(),c.descricao||"",c.credito||"",tagsDe(c).join(" ")].filter(x=>x).join("\n\n");
 try{await navigator.clipboard.writeText(txt)}catch(e){const a=document.createElement("textarea");a.value=txt;document.body.appendChild(a);a.select();document.execCommand("copy");a.remove()}
-toast("📋 Título, crédito e hashtags copiados")}
+toast("📋 Título, descrição, crédito e hashtags copiados")}
 function listaAba(){const f=ABAS.find(a=>a[0]===aba)[2];return estado.clipes.filter(c=>f(c.status||""))}
 function pintarSel(){document.querySelectorAll(".clip").forEach(el=>el.classList.toggle("sel",sel.has(el.dataset.id)));
 const n=sel.size;$("#lote").classList.toggle("on",n>0);$("#lote_qtd").textContent=n+" selecionado"+(n==1?"":"s")}
@@ -207,6 +219,8 @@ def iniciar(fabrica, vigias, host, porta):
             m["destinos"] = fabrica.destinos_atuais(m)
             canal = next((c for c in fabrica.cfg["canais"] if c["nome"] == m.get("canal")), None)
             m["credito"] = cfg_credito(fabrica.cfg, canal)
+            pub = fabrica.cfg["publicacao"]
+            m["credito_tiktok"] = cfg_credito({**fabrica.cfg, "publicacao": {**pub, "credito": pub.get("credito_tiktok")}}, canal)
             clipes.append(m)
         return {"modo": fabrica.cfg["publicacao"]["modo"], "lives": lives, "clipes": clipes}
 
