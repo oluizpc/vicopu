@@ -4,3 +4,10 @@ credenciais/
 .venv/
 __pycache__/
 *.pyc
+
+# segredos: nunca vão pro git
+.env
+.env.*
+*.key
+*client_secret*.json
+token*.json
