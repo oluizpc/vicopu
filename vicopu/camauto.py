@@ -105,10 +105,11 @@ def achar_rosto_local(quadros):
 
 def moldura_a_partir_do_rosto(rosto, cinzas):
     """Sai do rosto pra fora, em cada direção, até achar a moldura da webcam (linha reta e contínua).
-    Se não achar moldura num lado, usa o enquadramento típico de cam (ou a borda da tela)."""
+    Se não achar moldura num lado, usa o enquadramento típico de cam (ou a borda da tela).
+    Retorna (caixa, quantos_lados_tinham_moldura)."""
     tipica = caixa_em_volta_do_rosto(rosto)
     if not cinzas:
-        return tipica
+        return tipica, 0
     gx = np.mean([np.abs(np.diff(q, axis=1)) for q in cinzas], axis=0)
     gy = np.mean([np.abs(np.diff(q, axis=0)) for q in cinzas], axis=0)
     fx0, fx1 = rosto["x"] * LARG, (rosto["x"] + rosto["w"]) * LARG
@@ -121,6 +122,8 @@ def moldura_a_partir_do_rosto(rosto, cinzas):
     perfil_x = (gx[faixa_y, :] > limiar).mean(axis=0)
     perfil_y = (gy[:, faixa_x] > limiar).mean(axis=1)
 
+    achados = []
+
     def procurar(perfil, de, ate, padrao, borda_tela):
         de, ate = int(round(de)), int(round(ate))
         passo = 1 if ate >= de else -1
@@ -128,7 +131,9 @@ def moldura_a_partir_do_rosto(rosto, cinzas):
         idx = [i for i in idx if 0 <= i < len(perfil)]
         fortes = [i for i in idx if perfil[i] >= 0.8]  # linha quase inteira = moldura
         if fortes:
+            achados.append(True)
             return fortes[0]  # a primeira moldura saindo do rosto
+        achados.append(borda_tela is not None)  # colada na borda da tela também conta como achada
         return borda_tela if borda_tela is not None else padrao
 
     tx0, ty0 = tipica["x"] * LARG, tipica["y"] * ALT
@@ -141,18 +146,20 @@ def moldura_a_partir_do_rosto(rosto, cinzas):
     # a diferença (diff) fica entre o pixel i e i+1: a área da cam começa em i+1 (esq/topo) e acaba em i (dir/baixo)
     x0, y0 = (x0 + 1 if x0 > 0 else 0), (y0 + 1 if y0 > 0 else 0)
     x0, y0, x1, y1 = x0 + 1, y0 + 1, x1 - 1, y1 - 1  # recua 1 px pra não pegar a linha da moldura
+    lados = sum(achados)
     if x1 - x0 < fw or y1 - y0 < fh:
-        return tipica
+        return tipica, 0
     return {"x": round(max(0, x0) / LARG, 4), "y": round(max(0, y0) / ALT, 4),
-            "w": round((x1 - max(0, x0)) / LARG, 4), "h": round((y1 - max(0, y0)) / ALT, 4)}
+            "w": round((x1 - max(0, x0)) / LARG, 4), "h": round((y1 - max(0, y0)) / ALT, 4)}, lados
 
 
 def caixa_em_volta_do_rosto(rosto):
     """Palpite da janela da webcam a partir do rosto (enquadramento típico de cam de streamer)."""
-    x = rosto["x"] - 1.3 * rosto["w"]
-    y = rosto["y"] - 0.9 * rosto["h"]
-    w = rosto["w"] * 3.6
-    h = rosto["h"] * 2.9
+    w = rosto["w"] * 2.6
+    h = rosto["h"] * 2.0
+    cx, cy = rosto["x"] + rosto["w"] / 2, rosto["y"] + rosto["h"] / 2
+    x = cx - w / 2
+    y = cy - 0.58 * h  # o rosto costuma ficar um pouco abaixo do meio da cam
     x, y = max(0.0, x), max(0.0, y)
     w, h = min(w, 1.0 - x), min(h, 1.0 - y)
     return {"x": x, "y": y, "w": w, "h": h}
@@ -276,7 +283,13 @@ def detectar(cfg, caminhos_segmentos, nome_canal):
                      nome_canal)
             rosto = None
     if rosto:
-        final = moldura_a_partir_do_rosto(rosto, cinzas)
+        final, lados = moldura_a_partir_do_rosto(rosto, cinzas)
+        if lados < 3 and usa_claude:
+            # a cam não tem moldura clara (encosta direto no fundo/chat): o tamanho exato fica com o Claude
+            log.info("[%s] Rosto achado, mas a cam não tem moldura clara (%d de 4 lados). Confirmando com o Claude...",
+                     nome_canal, lados)
+            rosto = None
+    if rosto:
         log.info("[%s] Cam encontrada (rosto local, grátis): %s", nome_canal, final)
         destino = os.path.join(cfg["geral"]["pasta_trabalho"], "camauto", f"{nome_canal}.jpg")
         salvar_previa(ff, caminhos_segmentos[len(caminhos_segmentos) // 2], final, destino)
