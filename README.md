@@ -534,7 +534,8 @@ Tudo é opcional, exceto `canais`. O que você não colocar usa o padrão.
 |---|---|---|
 | `usar_claude` | `true` | título, descrição e filtro pelo Claude |
 | `modelo` | `claude-haiku-5-5` | modelo usado |
-| `respeitar_descarte` | `true` | trechos fracos não viram clipe (nunca no corte manual) |
+| `respeitar_descarte` | `true` | trechos fracos vão pra aba Descartados em vez de Pendentes (nunca no corte manual) |
+| `montar_descartados` | `true` | monta o vídeo dos descartados mesmo assim, pra você assistir e publicar na mão se a IA errou |
 | `camauto_claude` | `true` | usa o Claude quando a detecção grátis da cam falha |
 | `foco` | `""` | assunto do canal (ex.: `GTA 6`) |
 | `instrucoes_extras` | `""` | regras extras pro Claude (ex.: sem spoiler) |
