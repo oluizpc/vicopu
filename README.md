@@ -73,7 +73,10 @@ Layouts disponíveis:
 **YouTube**
 1. No Google Cloud Console: crie um projeto, ative a **YouTube Data API v3**, crie um ID do cliente OAuth do tipo *App para computador* e baixe o JSON para `credenciais/youtube_client_secret.json`.
 2. Rode `python -m vicopu auth-youtube cortes_principal` e entre com a conta do canal.
-3. ⚠️ **Cota:** o padrão do Google dá poucos uploads por dia por projeto, algo como meia dúzia. Pra volume de GTA, peça aumento de cota no Console **já**.
+3. ⚠️ **Cota:** o padrão do Google dá poucos uploads por dia por projeto, algo como meia dúzia. Pra volume de GTA, peça aumento de cota no Console **já** (página da YouTube Data API v3 → aba "Cotas e limites do sistema").
+4. **Mais canais** (ex.: o canal monetizado): mesmo projeto e mesma credencial. Adicione o Gmail dono do canal em *Google Auth Platform → Público-alvo → Usuários de teste* e rode `python -m vicopu auth-youtube principal` logado com essa conta.
+5. ⚠️ **Antes de usar pra valer:** em *Público-alvo*, clique em **"Publicar app"**. No modo "Teste", o Google derruba a autorização a cada 7 dias.
+6. Projetos não auditados pelo Google sobem os vídeos como **privados**. Nos testes, deu pra trocar pra público depois, no YouTube Studio (o painel tem o atalho "abrir no Studio").
 
 **TikTok**
 1. Em developers.tiktok.com: crie um app com *Login Kit* + *Content Posting API*. Os escopos são `video.upload` e `video.publish`, e o redirect URI é qualquer URL https sua.
@@ -107,6 +110,7 @@ Os ajustes ficam em `deteccao:` no config:
 | Corta demais / momentos fracos | aumente `limiar_score` (1.3) ou `multiplicador_pico` (4) |
 | Não corta nunca (chat pequeno) | diminua `minimo_mensagens_janela` (4) e `multiplicador_pico` (2) |
 | Clipes muito seguidos | aumente `cooldown_segundos` |
+| Um streamer pequeno e outro gigante juntos | use `sensibilidade: alta` no pequeno e `sensibilidade: baixa` no gigante (no bloco do canal). Ajuste fino por canal: `deteccao: {cooldown_segundos: 120}` dentro do canal |
 | Começa tarde demais / perde o lance | aumente `corte.antes_segundos` |
 
 O log mostra cada disparo com o motivo, por exemplo `chat 48 msgs/10s (normal 9.2, x5.2), palavras 31, áudio sim`. Use isso pra ajustar.

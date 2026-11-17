@@ -39,6 +39,19 @@ setTimeout(()=>location.reload(), 20000);
 </script></body></html>"""
 
 
+def _resultado_html(destino, valor):
+    """Resultado da publicação: link clicável + atalho pro YouTube Studio (onde dá pra mudar a visibilidade)."""
+    valor = str(valor)
+    if valor.startswith("http"):
+        link = f'<a href="{html.escape(valor)}" target="_blank" style="color:#7cc4ff">abrir</a>'
+        m = re.search(r"youtube\.com/shorts/([\w-]+)", valor)
+        if m:
+            link += (f' · <a href="https://studio.youtube.com/video/{m.group(1)}/edit" target="_blank" '
+                     f'style="color:#7cc4ff">abrir no Studio</a>')
+        return f"{html.escape(destino)}: {link}"
+    return f"{html.escape(destino)}: {html.escape(valor)}"
+
+
 def iniciar(fabrica, vigias, host, porta):
     por_nome = {v.canal["nome"]: v for v in vigias}
 
@@ -70,7 +83,8 @@ def iniciar(fabrica, vigias, host, porta):
                 f'<div class="live"><span class="dot" style="background:{"#17c964" if v.no_ar() else "#555"}"></span>'
                 f'<b>{html.escape(n)}</b> <small style="margin:0">{v.canal["plataforma"]} · '
                 f'{"<a style=color:#9aa href=/camauto/" + urllib.parse.quote(n) + " target=_blank>" if v.automatico else ""}'
-                f'{v.layout_atual}{" (auto)</a>" if v.automatico else ""}</small>'
+                f'{v.layout_atual}{" (auto)</a>" if v.automatico else ""}'
+                f' · sens. {html.escape(str(v.canal.get("sensibilidade", "normal")))}</small>'
                 f'<button class="cut" onclick="acao(\'/cortar/{urllib.parse.quote(n)}\')">✂ cortar agora</button></div>'
                 for n, v in por_nome.items())
             cards = []
@@ -83,8 +97,7 @@ def iniciar(fabrica, vigias, host, porta):
                               f'<button class="no" onclick="acao(\'/descartar/{m["id"]}\')">Descartar</button>')
                 video = (f'<video controls preload="metadata" src="/video/{m["id"]}"></video>'
                          if os.path.exists(m.get("video", "")) else "")
-                res = "<br>".join(f"{html.escape(k)}: {html.escape(str(v))}"
-                                  for k, v in (m.get("resultados") or {}).items())
+                res = "<br>".join(_resultado_html(k, v) for k, v in (m.get("resultados") or {}).items())
                 lixo = ("" if st in ("renderizando", "publicando") else
                         f'<button class="lixo" title="Excluir clipe (apaga do disco)" '
                         f'onclick="if(confirm(\'Excluir este clipe do painel e do disco?\'))acao(\'/excluir/{m["id"]}\')">🗑</button>')

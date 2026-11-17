@@ -73,6 +73,7 @@ canais:
     layout: auto                 # o VICOPU acha a webcam sozinho (rosto grátis; Claude só se precisar)
     # layout: split              # ou fixe na mão:
     # facecam: {x: 0.0, y: 0.0, w: 0.25, h: 0.30}   # posição da cam (frações da tela)
+    sensibilidade: normal        # alta (streamer pequeno) | normal | baixa (streamer gigante)
     hashtags: ["#gta6", "#gtavi"]
     # idioma: en                 # idioma da legenda deste canal ("" = detectar sozinho). Padrão: corte.idioma
     publicar_em: [youtube:cortes_principal, tiktok:cortes_tiktok]

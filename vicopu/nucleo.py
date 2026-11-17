@@ -15,13 +15,32 @@ from .detector import Detector
 from .publicar import publicar
 
 
+SENSIBILIDADES = {
+    # alta: streamer pequeno (chat calmo) · baixa: streamer gigante (chat sempre lotado)
+    "alta": {"minimo_mensagens_janela": 4, "multiplicador_pico": 2.5, "limiar_score": 0.9},
+    "normal": {},
+    "baixa": {"minimo_mensagens_janela": 15, "multiplicador_pico": 4.0, "limiar_score": 1.2},
+}
+
+
+def deteccao_do_canal(cfg, canal):
+    """Regras de detecção do canal: as gerais + o atalho 'sensibilidade' + ajustes finos em 'deteccao'."""
+    regras = dict(cfg["deteccao"])
+    nivel = str(canal.get("sensibilidade", "normal")).lower()
+    if nivel not in SENSIBILIDADES:
+        raise ValueError(f"sensibilidade '{nivel}' inválida no canal {canal['nome']} (use alta, normal ou baixa)")
+    regras.update(SENSIBILIDADES[nivel])
+    regras.update(canal.get("deteccao") or {})
+    return regras
+
+
 class Vigia:
     def __init__(self, canal, cfg, fabrica):
         self.canal = canal
         self.cfg = cfg
         g = cfg["geral"]
         self.buffer = Buffer(g["buffer_minutos"] * 60)
-        self.detector = Detector(canal["nome"], cfg["deteccao"], self._momento)
+        self.detector = Detector(canal["nome"], deteccao_do_canal(cfg, canal), self._momento)
         self.fabrica = fabrica
         self.captura = Captura(canal, cfg, self.buffer, self._segmento)
         self.chat = criar_leitor(canal, cfg, self.detector.nova_msg)
