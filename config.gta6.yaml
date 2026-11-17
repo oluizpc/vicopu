@@ -1,0 +1,97 @@
+# ============================================================
+#  VICOPU: config do lançamento do GTA 6 (18 e 19/11/2026)
+#  Uso:  copy config.gta6.yaml config.yaml   (e reinicie o VICOPU)
+#  Quem estiver offline não gasta nada: o VICOPU checa a cada 60 s
+#  e começa a vigiar sozinho quando a live abrir.
+# ============================================================
+
+geral:
+  workers_corte: 2               # cortes montando ao mesmo tempo (PC com placa: pode subir pra 3)
+
+corte:
+  modelo_whisper: small          # se o PC engasgar com muitas lives, troque por: base
+  duracao_maxima: 59
+
+ia:
+  foco: "GTA 6"
+  instrucoes_extras: >-
+    O jogo acabou de lançar e muita gente ainda não jogou: NUNCA dê spoiler da história
+    (mortes, traições, finais, reviravoltas, nomes de missões) no título nem na descrição.
+    Prefira a reação do streamer, momentos engraçados, caos e jogabilidade.
+
+publicacao:
+  modo: revisao                  # você aprova no painel antes de subir
+  credito: "🎮 Corte da live de {streamer}. Live completa: {link}"
+  credito_tiktok: "🎮 Live: {link_curto}"
+
+contas:
+  youtube:
+    teste:
+      privacidade: private       # sobe privado; você muda pra público no Studio
+  # quando tiver o canal monetizado:
+  #   principal:
+  #     privacidade: private
+
+canais:
+  # ---------- Quarta 18, a partir das 8h (truque da Nova Zelândia) ----------
+  - nome: alanzoka
+    apelido: Alanzoka
+    plataforma: twitch
+    canal: alanzoka              # confirmado: abre às 8h
+    layout: auto
+    sensibilidade: baixa         # chat gigante: só corta picos muito fortes
+    hashtags: ["#gta6", "#alanzoka"]
+    publicar_em: [youtube:teste]
+
+  - nome: davyjones
+    apelido: Davy Jones
+    plataforma: twitch
+    canal: davyjones             # planejava jogar cedo (sem horário confirmado)
+    layout: auto
+    sensibilidade: normal
+    hashtags: ["#gta6", "#davyjones"]
+    publicar_em: [youtube:teste]
+
+  # SanInPlay e Cross também disseram que iam jogar cedo, mas não confirmei os canais.
+  # Se souber, descomente e ajuste (Twitch: nome da URL · YouTube: "@handle"):
+  # - nome: saninplay
+  #   apelido: SanInPlay
+  #   plataforma: youtube
+  #   canal: "@SanInPlay"
+  #   layout: auto
+  #   hashtags: ["#gta6", "#saninplay"]
+  #   publicar_em: [youtube:teste]
+
+  # ---------- Quarta 18, à tarde/noite (gringos, em inglês) ----------
+  - nome: vanoss
+    apelido: Vanoss
+    plataforma: twitch
+    canal: vanosscrew            # anunciado: 17h (Brasília)
+    layout: auto
+    idioma: en
+    sensibilidade: normal
+    hashtags: ["#gta6", "#vanoss"]
+    publicar_em: [youtube:teste]
+
+  - nome: kaicenat
+    apelido: Kai Cenat
+    plataforma: twitch
+    canal: kaicenat              # anunciado: 22h (Brasília), maratona
+    layout: auto
+    idioma: en
+    sensibilidade: baixa
+    hashtags: ["#gta6", "#kaicenat"]
+    publicar_em: [youtube:teste]
+
+  - nome: speed
+    apelido: IShowSpeed
+    plataforma: youtube
+    canal: "@IShowSpeed"         # anunciado: 23h (Brasília)
+    layout: auto
+    idioma: en
+    sensibilidade: baixa
+    hashtags: ["#gta6", "#ishowspeed"]
+    publicar_em: [youtube:teste]
+
+  # ---------- Quinta 19, 0h (liberação oficial no Brasil) ----------
+  # Os demais brasileiros entram aqui. Adicione quem você quiser no mesmo formato.
