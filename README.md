@@ -114,6 +114,22 @@ copy config.gta6.yaml config.yaml
 ```
 O `config.yaml` é **seu**: ele não vai pro git, e o `git pull` nunca mexe nele. Cada computador tem o próprio.
 
+### 2.5 Atalhos de dois cliques (recomendado)
+
+Na pasta `C:\vicopu` tem dois arquivos que fazem tudo sozinhos:
+- **`iniciar.bat`:** entra na pasta, ativa o `.venv` certo, liga o VICOPU e abre o painel no navegador. Pra desligar, Ctrl+C na janela.
+- **`atualizar.bat`:** baixa a versão nova (`git pull`) e instala o que mudou.
+
+Dica: clique com o botão direito no `iniciar.bat` → **Enviar para → Área de trabalho (criar atalho)**.
+
+**Pelo Prompt, o equivalente é** (um comando por linha):
+```bat
+cd C:\vicopu
+.venv\Scripts\activate
+python -m vicopu rodar
+```
+A linha precisa mostrar `(.venv) C:\vicopu>` antes do último comando. Se aparecer `(.venv)` mas a pasta for outra (ex.: `C:\Users\voce`), rode `deactivate` e comece pelo `cd`.
+
 ---
 
 ## 3. Primeiro teste em 5 minutos
@@ -381,6 +397,7 @@ Pra nunca usar o Claude nessa parte: `ia: {camauto_claude: false}`.
 
 ## 12. Atualizar o VICOPU
 
+Dois cliques no **`atualizar.bat`**, ou pelo Prompt:
 ```bat
 cd C:\vicopu
 .venv\Scripts\activate
