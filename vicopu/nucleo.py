@@ -15,6 +15,9 @@ from .detector import Detector
 from .publicar import publicar
 
 
+# estados em que o clipe ainda pode ter título editado e ser publicado (descartado = resgate manual)
+EDITAVEIS = ("pendente", "pronto", "erro", "descartado", "descartado_ia")
+
 SENSIBILIDADES = {
     # alta: streamer pequeno (chat calmo) · baixa: streamer gigante (chat sempre lotado)
     "alta": {"minimo_mensagens_janela": 4, "multiplicador_pico": 2.5, "limiar_score": 0.9},
@@ -187,11 +190,13 @@ class Fabrica:
                     "video": os.path.join(pasta, "final.mp4"), "status": "renderizando",
                     "resultados": {}}
 
-            if not decisao["publicar"] and cfg["ia"]["respeitar_descarte"] and not m.manual:
+            descartou = (not decisao["publicar"] and cfg["ia"]["respeitar_descarte"] and not m.manual)
+            if descartou and not cfg["ia"].get("montar_descartados", True):
                 meta["status"] = "descartado_ia"
                 self.salvar(meta)
                 self.log.info("Claude descartou %s: %s", cid, decisao.get("motivo"))
                 return
+            meta["descartado_pela_ia"] = descartou
             self.salvar(meta)
 
             layout, facecam = vigia.layout_atual, vigia.facecam_atual  # fotografa o layout deste corte
@@ -211,7 +216,13 @@ class Fabrica:
 
         meta["duracao"] = round(b - a, 1)
         modo = cfg["publicacao"]["modo"]
-        if modo == "auto" and meta["destinos"]:
+        if meta.get("descartado_pela_ia"):
+            # monta mesmo assim pra você poder assistir e, se a IA errou, publicar na mão
+            meta["status"] = "descartado_ia"
+            self.salvar(meta)
+            self.log.info("Claude descartou %s (vídeo montado; dá pra ver e publicar no painel, aba Descartados): %s",
+                          cid, decisao.get("motivo"))
+        elif modo == "auto" and meta["destinos"]:
             self.publicar(meta)
         else:
             meta["status"] = "pendente" if modo == "revisao" else "pronto"
@@ -241,12 +252,14 @@ class Fabrica:
         meta["destinos"] = self.destinos_atuais(meta)
         if not meta["destinos"]:
             raise ValueError(f"o canal '{meta.get('canal')}' não tem destino: coloque publicar_em no config.yaml")
-        if meta["status"] in ("pendente", "pronto", "erro"):
+        if meta["status"] in EDITAVEIS:
             self.pool.submit(self.publicar, meta, titulo)
+        else:
+            raise RuntimeError("esse clipe já foi publicado ou está em andamento")
 
     def mudar_titulo(self, cid, titulo):
         meta = self.ler(cid)
-        if meta.get("status") not in ("pendente", "pronto", "erro"):
+        if meta.get("status") not in EDITAVEIS:
             raise RuntimeError("esse clipe não pode mais ser editado")
         if not titulo:
             raise ValueError("o título não pode ficar vazio")
@@ -279,7 +292,7 @@ class Fabrica:
                     meta = self.ler(cid)
                     if not os.path.exists(meta.get("video", "") or ""):
                         raise RuntimeError("sem vídeo")
-                    if meta.get("status") not in ("pendente", "pronto", "erro"):
+                    if meta.get("status") not in EDITAVEIS:
                         raise RuntimeError("já publicado ou em andamento")
                     self.publicar_async(cid)
                 elif acao == "descartar":

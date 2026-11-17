@@ -128,7 +128,8 @@ return`<div class="live"><div class="nome"><span class="dot ${l.no_ar?"on":""}">
  · sensibilidade ${esc(l.sensibilidade)} · ${n} clipe${n==1?"":"s"}</div>
 <div><button class="btn roxo" ${l.no_ar?"":"disabled"} onclick="cortar('${esc(l.nome)}')">✂ Cortar agora</button></div></div>`}).join("")||
 `<div class="vazia">Nenhuma live no config.</div>`}
-function card(c){const st=c.status||"";const podeEditar=["pendente","pronto","erro"].includes(st);
+function card(c){const st=c.status||"";const descartado=st.startsWith("descartado");
+const podeEditar=["pendente","pronto","erro"].includes(st)||descartado;
 const video=c.tem_video?`<video controls preload="metadata" src="/video/${c.id}"></video>`:
 `<div class="vazio">${st==="renderizando"?"Montando o clipe…":"Sem vídeo (não foi montado)"}</div>`;
 return`<div class="clip ${st==="pendente"?"destaque":""} ${sel.has(c.id)?"sel":""}" data-id="${c.id}">
@@ -136,11 +137,11 @@ return`<div class="clip ${st==="pendente"?"destaque":""} ${sel.has(c.id)?"sel":"
 <div class="corpo"><div class="linha"><span class="status st-${esc(st)}">${esc(NOMES[st]||st)}</span>
 <b style="color:var(--txt)">${esc(c.canal)}</b> · há ${ha(c.criado)}${c.manual?" · manual":""}</div>
 <textarea id="t_${c.id}" ${podeEditar?"":"readonly"} onchange="salvarTitulo('${c.id}')">${esc(c.titulo)}</textarea>
-<div class="acoes">
+${descartado&&c.motivo_ia&&c.motivo_ia!=="sem IA"?`<div class="res">🤖 <b>Por que a IA descartou:</b> ${esc(c.motivo_ia)}</div>`:""}${descartado&&!c.tem_video?`<div class="res">Esse foi descartado antes da mudança que monta o vídeo dos descartados; não tem vídeo pra ver.</div>`:""}<div class="acoes">
 ${podeEditar&&c.tem_video?`<button class="btn verde" onclick="publicar('${c.id}')" ${c.destinos&&c.destinos.length?`title="Publicar em: ${esc(c.destinos.join(", "))}"`:"disabled"}>Publicar</button>`:""}
 ${c.tem_video?`<a class="btn" href="/baixar/${c.id}">⬇ Baixar</a>`:""}
 <button class="btn" onclick="copiar('${c.id}')">📋 Copiar</button>
-${podeEditar?`<button class="btn fant" onclick="descartar('${c.id}')">Descartar</button>`:""}
+${podeEditar&&!descartado?`<button class="btn fant" onclick="descartar('${c.id}')">Descartar</button>`:""}
 ${["renderizando","publicando"].includes(st)?"":`<button class="btn fant perigo" title="Excluir do painel e do disco" onclick="excluir('${c.id}')">🗑</button>`}
 </div>
 ${podeEditar&&c.tem_video&&!(c.destinos&&c.destinos.length)?`<div class="res">⚠ Sem destino pra publicar: coloque <b>publicar_em</b> no canal <b>${esc(c.canal)}</b> no config.yaml e reinicie. Ou use Baixar/Copiar e poste na mão.</div>`:""}

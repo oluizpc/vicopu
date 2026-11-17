@@ -51,6 +51,7 @@ PADROES = {
         "usar_claude": True,
         "modelo": "claude-haiku-5-5",
         "respeitar_descarte": True,
+        "montar_descartados": True,  # monta o vídeo dos descartados pra você conferir no painel
         "camauto_claude": True,  # se a detecção grátis de rosto não achar a cam, pergunta ao Claude
         "foco": "",  # ex.: "GTA 6" (vazio = qualquer conteúdo)
         "instrucoes_extras": "",
