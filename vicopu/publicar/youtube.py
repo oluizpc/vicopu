@@ -10,7 +10,7 @@ def caminho_token(cfg, conta):
     return os.path.join(cfg["geral"]["pasta_trabalho"], "credenciais", f"youtube_{conta}.json")
 
 
-def autorizar(cfg, conta, porta=8090):
+def autorizar(cfg, conta, porta=8090, abrir_navegador=True):
     """Abre o login do Google uma vez e guarda o token da conta."""
     from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -19,9 +19,10 @@ def autorizar(cfg, conta, porta=8090):
         raise SystemExit(f"Não achei {segredo}. Baixe o JSON do cliente OAuth (tipo 'App para computador') "
                          f"no Google Cloud Console e salve nesse caminho.")
     fluxo = InstalledAppFlow.from_client_secrets_file(segredo, ESCOPOS)
-    print(f"\nAbra o link abaixo no navegador e entre com a conta do canal '{conta}'.\n"
-          f"(Num servidor sem tela: faça 'ssh -L {porta}:localhost:{porta} seu_servidor' antes.)\n")
-    cred = fluxo.run_local_server(port=porta, open_browser=False, prompt="consent")
+    print(f"\nVai abrir o login do Google. Entre com a conta e ESCOLHA O CANAL '{conta}' onde os Shorts vão sair.\n"
+          f"Se o navegador não abrir, copie o link que aparecer abaixo.\n"
+          f"(Num servidor sem tela: use --sem-navegador e faça 'ssh -L {porta}:localhost:{porta} seu_servidor'.)\n")
+    cred = fluxo.run_local_server(port=porta, open_browser=abrir_navegador, prompt="consent")
     destino = caminho_token(cfg, conta)
     os.makedirs(os.path.dirname(destino), exist_ok=True)
     with open(destino, "w") as f:

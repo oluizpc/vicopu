@@ -79,6 +79,7 @@ def main():
     a = sub.add_parser("auth-youtube")
     a.add_argument("conta")
     a.add_argument("--porta", type=int, default=8090)
+    a.add_argument("--sem-navegador", action="store_true", help="não abrir o navegador (servidor sem tela)")
     b = sub.add_parser("auth-tiktok")
     b.add_argument("conta")
     t = sub.add_parser("testar-layout")
@@ -96,7 +97,7 @@ def main():
         rodar(cfg)
     elif args.cmd == "auth-youtube":
         from .publicar import youtube
-        youtube.autorizar(cfg, args.conta, args.porta)
+        youtube.autorizar(cfg, args.conta, args.porta, not args.sem_navegador)
     elif args.cmd == "auth-tiktok":
         from .publicar import tiktok
         tiktok.autorizar(cfg, args.conta)
