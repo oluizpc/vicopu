@@ -67,12 +67,14 @@ class Buffer:
 class Captura(threading.Thread):
     """streamlink -> ffmpeg (segmentador). Reconecta sozinho quando a live cai ou ainda não começou."""
 
-    def __init__(self, canal, cfg, buffer, ao_segmento=None):
+    def __init__(self, canal, cfg, buffer, ao_segmento=None, ao_entrar_no_ar=None):
         super().__init__(daemon=True, name=f"captura-{canal['nome']}")
         self.canal = canal
         self.cfg = cfg
         self.buffer = buffer
         self.ao_segmento = ao_segmento
+        self.ao_entrar_no_ar = ao_entrar_no_ar
+        self.offline_avisado = False
         self.parar_evt = threading.Event()
         self.log = logging.getLogger(f"vigia.{canal['nome']}")
         self.no_ar = False
@@ -122,6 +124,7 @@ class Captura(threading.Thread):
             os.makedirs(pasta, exist_ok=True)
             fonte, cmd_ffmpeg = self._comandos(pasta)
             self.procs = []
+            pegou_video = False
             try:
                 if fonte:
                     p1 = subprocess.Popen(fonte, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -131,36 +134,52 @@ class Captura(threading.Thread):
                 else:
                     p2 = subprocess.Popen(cmd_ffmpeg, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE)
                     self.procs = [p2]
-                self.log.info("Conectando em %s", url_da_live(self.canal))
-                self._acompanhar_lista(pasta, p2)
+                if not self.offline_avisado:
+                    self.log.info("Conectando em %s", url_da_live(self.canal))
+                pegou_video = self._acompanhar_lista(pasta, p2)
             except FileNotFoundError as e:
                 self.log.error("Programa não encontrado (%s). Instale ffmpeg/streamlink.", e)
             finally:
+                estava_no_ar = self.no_ar
                 self.no_ar = False
                 for p in self.procs:
                     try:
                         p.kill()
                     except Exception:
                         pass
-                erro = ""
-                for p in self.procs:
-                    try:
-                        erro += (p.stderr.read() or b"").decode(errors="ignore")[-400:]
-                    except Exception:
-                        pass
-                if erro.strip() and not self.parar_evt.is_set():
-                    self.log.info("Captura encerrou: %s", erro.strip().splitlines()[-1])
-            if not self.parar_evt.is_set():
-                self.log.info("Live offline ou caiu. Tentando de novo em 30 s.")
+                erro_fonte = erro_ffmpeg = ""
+                try:
+                    if len(self.procs) == 2:
+                        erro_fonte = (self.procs[0].stderr.read() or b"").decode(errors="ignore")
+                    erro_ffmpeg = (self.procs[-1].stderr.read() or b"").decode(errors="ignore")
+                except Exception:
+                    pass
+            if self.parar_evt.is_set():
+                break
+            shutil.rmtree(pasta, ignore_errors=True)
+            if estava_no_ar or pegou_video:
+                # estava transmitindo e parou: live acabou ou a conexão caiu
+                self.offline_avisado = False
+                self.log.info("A live parou de chegar (acabou ou caiu). Tentando de novo em 30 s.")
                 self.parar_evt.wait(30)
-                shutil.rmtree(pasta, ignore_errors=True)
+            elif _parece_offline(erro_fonte):
+                # offline: avisa uma vez e depois checa em silêncio
+                if not self.offline_avisado:
+                    self.log.info("Offline no momento. Vou checar a cada 60 s e aviso quando entrar no ar.")
+                    self.offline_avisado = True
+                self.parar_evt.wait(60)
+            else:
+                ultima = (erro_fonte.strip() or erro_ffmpeg.strip() or "sem detalhes").splitlines()[-1]
+                self.log.warning("Não consegui abrir a live (%s). Tentando de novo em 60 s.", ultima[:200])
+                self.offline_avisado = True  # não repete o "Conectando em..." a cada tentativa
+                self.parar_evt.wait(60)
 
     def _acompanhar_lista(self, pasta, proc):
         lista = os.path.join(pasta, "lista.csv")
         lidas = 0
         while not self.parar_evt.is_set():
             if proc.poll() is not None:
-                return
+                return lidas > 0
             if os.path.exists(lista):
                 with open(lista, encoding="utf-8", errors="ignore") as f:
                     linhas = f.read().splitlines()
@@ -174,7 +193,13 @@ class Captura(threading.Thread):
                     self.buffer.adicionar(seg)
                     if not self.no_ar:
                         self.no_ar = True
+                        self.offline_avisado = False
                         self.log.info("NO AR. Vigiando.")
+                        if self.ao_entrar_no_ar:
+                            try:
+                                self.ao_entrar_no_ar()
+                            except Exception as e:
+                                self.log.debug("ao_entrar_no_ar falhou: %s", e)
                     if self.ao_segmento:
                         try:
                             self.ao_segmento(seg)
@@ -182,6 +207,14 @@ class Captura(threading.Thread):
                             self.log.debug("ao_segmento falhou: %s", e)
                 lidas = len(linhas)
             time.sleep(0.5)
+        return lidas > 0
+
+
+def _parece_offline(erro_streamlink):
+    """O streamlink diz isso quando o canal não está ao vivo (Twitch, Kick e YouTube)."""
+    t = erro_streamlink.lower()
+    return any(k in t for k in ("no playable streams", "offline", "no streams found",
+                                 "this channel is not live", "is not currently live", "could not find"))
 
 
 def volume_medio(ffmpeg, caminho):

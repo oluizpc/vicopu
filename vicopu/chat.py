@@ -16,34 +16,68 @@ class LeitorChat(threading.Thread):
         self.ao_msg = ao_msg
         self.parar_evt = threading.Event()
         self.log = logging.getLogger(f"chat.{canal['nome']}")
+        self.ativo = lambda: True  # o Vigia troca por "a live está no ar?"
+        self._ultimo_erro, self._repeticoes = None, 0
 
     def parar(self):
         self.parar_evt.set()
 
+    def no_ar(self):
+        return self.ativo() and not self.parar_evt.is_set()
+
     def run(self):
         while not self.parar_evt.is_set():
+            if not self.ativo():  # live offline: nem tenta conectar o chat
+                self.parar_evt.wait(5)
+                continue
             try:
                 self.ler()
+                self._ultimo_erro, self._repeticoes = None, 0
             except Exception as e:
-                self.log.warning("Chat caiu (%s). Reconectando em 15 s.", e)
+                if self.ativo():
+                    self._avisar(str(e))
             self.parar_evt.wait(15)
+
+    def _avisar(self, erro):
+        """Mostra o erro na primeira vez e depois só a cada ~5 min, pra não encher o console."""
+        if erro == self._ultimo_erro:
+            self._repeticoes += 1
+            if self._repeticoes % 20:
+                return
+            self.log.warning("Chat ainda sem conexão (%s). Continuo tentando.", erro)
+            return
+        self._ultimo_erro, self._repeticoes = erro, 0
+        self.log.warning("Chat caiu (%s). Tentando de novo a cada 15 s.", erro)
 
     def ler(self):
         raise NotImplementedError
 
 
 class ChatTwitch(LeitorChat):
-    """IRC anônimo da Twitch (usuário justinfan, só leitura)."""
+    """Chat da Twitch como espectador anônimo (justinfan, só leitura).
+    Tenta o IRC normal (porta 6667) e, se a rede bloquear, o IRC por WebSocket (porta 443)."""
+
+    def _linha(self, linha):
+        if " PRIVMSG " in linha:
+            self.ao_msg(linha.split(" :", 1)[1] if " :" in linha else "", time.time())
 
     def ler(self):
-        canal = str(self.canal["canal"]).lower().split("/")[-1]
-        s = socket.create_connection(("irc.chat.twitch.tv", 6667), timeout=400)
+        canal = str(self.canal["canal"]).lower().rstrip("/").split("/")[-1]
+        try:
+            self._ler_irc(canal)
+        except (socket.gaierror, ConnectionRefusedError, socket.timeout) as e:
+            self.log.debug("IRC normal falhou (%s); tentando por WebSocket.", e)
+            self._ler_websocket(canal)
+
+    def _ler_irc(self, canal):
+        s = socket.create_connection(("irc.chat.twitch.tv", 6667), timeout=20)
+        s.settimeout(400)
         s.sendall(f"NICK justinfan{random.randint(10000, 99999)}\r\n".encode())
         s.sendall(f"JOIN #{canal}\r\n".encode())
         self.log.info("Chat da Twitch conectado (#%s)", canal)
         resto = b""
         try:
-            while not self.parar_evt.is_set():
+            while self.no_ar():
                 dados = s.recv(8192)
                 if not dados:
                     raise ConnectionError("conexão fechada")
@@ -53,10 +87,26 @@ class ChatTwitch(LeitorChat):
                     linha = bruta.decode("utf-8", errors="ignore")
                     if linha.startswith("PING"):
                         s.sendall(b"PONG :tmi.twitch.tv\r\n")
-                    elif " PRIVMSG " in linha:
-                        self.ao_msg(linha.split(" :", 1)[1] if " :" in linha else "", time.time())
+                    else:
+                        self._linha(linha)
         finally:
             s.close()
+
+    def _ler_websocket(self, canal):
+        import websocket  # websocket-client
+        ws = websocket.create_connection("wss://irc-ws.chat.twitch.tv:443", timeout=400)
+        ws.send(f"NICK justinfan{random.randint(10000, 99999)}")
+        ws.send(f"JOIN #{canal}")
+        self.log.info("Chat da Twitch conectado por WebSocket (#%s)", canal)
+        try:
+            while self.no_ar():
+                for linha in ws.recv().split("\r\n"):
+                    if linha.startswith("PING"):
+                        ws.send("PONG :tmi.twitch.tv")
+                    elif linha:
+                        self._linha(linha)
+        finally:
+            ws.close()
 
 
 _EMOTE_KICK = re.compile(r"\[emote:\d+:([^\]]+)\]")
@@ -97,7 +147,7 @@ class ChatKick(LeitorChat):
                             "data": {"auth": "", "channel": f"chatrooms.{sala}.v2"}}))
         self.log.info("Chat da Kick conectado (sala %s)", sala)
         try:
-            while not self.parar_evt.is_set():
+            while self.no_ar():
                 msg = json.loads(ws.recv())
                 ev = msg.get("event", "")
                 if ev == "pusher:ping":
@@ -163,7 +213,7 @@ class ChatYouTube(LeitorChat):
         self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         arquivo, f, resto, avisou = None, None, "", False
         try:
-            while not self.parar_evt.is_set():
+            while self.no_ar():
                 if f is None:
                     achados = glob.glob(os.path.join(pasta, "*live_chat*"))
                     if achados:

@@ -42,8 +42,10 @@ class Vigia:
         self.buffer = Buffer(g["buffer_minutos"] * 60)
         self.detector = Detector(canal["nome"], deteccao_do_canal(cfg, canal), self._momento)
         self.fabrica = fabrica
-        self.captura = Captura(canal, cfg, self.buffer, self._segmento)
+        self.captura = Captura(canal, cfg, self.buffer, self._segmento, self.detector.reiniciar)
         self.chat = criar_leitor(canal, cfg, self.detector.nova_msg)
+        if self.chat:
+            self.chat.ativo = lambda: self.captura.no_ar  # chat só conecta com a live no ar
         self.log = logging.getLogger(f"vigia.{canal['nome']}")
         # layout "auto": começa no blur e troca pro split quando achar a webcam
         self.automatico = canal["layout"] == "auto" or canal.get("facecam") == "auto"

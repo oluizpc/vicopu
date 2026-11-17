@@ -31,6 +31,15 @@ class Detector:
         self.palavras = [p.lower() for p in self.c["palavras_chave"]]
         self.log = logging.getLogger(f"detector.{nome}")
 
+    def reiniciar(self):
+        """A live (re)começou: esquece o ritmo antigo do chat e aprende de novo."""
+        with self.trava:
+            self.msgs.clear()
+        self.base_chat = None
+        self.base_audio = None
+        self.audio_pico_ate = 0.0
+        self.inicio = time.time()
+
     def _tem_palavra(self, texto):
         t = texto.lower()
         return any(p in t for p in self.palavras)
