@@ -29,9 +29,9 @@ def tem_audio(ffprobe, caminho):
 
 def extrair_audio(ffmpeg, lista, inicio, duracao, pasta):
     saida = os.path.join(pasta, "audio.wav")
-    _rodar([ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0",
-            "-i", lista, "-ss", f"{inicio:.2f}", "-t", f"{duracao:.2f}", "-vn", "-ac", "1",
-            "-ar", "16000", saida])
+    # -ss/-t ANTES do -i: o trecho começa no tempo 0 (igual ao vídeo final, então a legenda bate)
+    _rodar([ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{inicio:.3f}", "-t", f"{duracao:.3f}",
+            "-f", "concat", "-safe", "0", "-i", lista, "-vn", "-ac", "1", "-ar", "16000", saida])
     return saida
 
 
@@ -113,8 +113,10 @@ def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", fa
     grafo = grafo_layout(layout, facecam, centro_x)
     if legenda_ass:
         grafo = grafo.replace("[v]", "[v0]") + f";[v0]subtitles={os.path.basename(legenda_ass)}[v]"
-    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0",
-           "-i", os.path.abspath(lista), "-ss", f"{inicio:.2f}", "-t", f"{duracao:.2f}",
+    # -ss/-t ANTES do -i: os filtros (inclusive a legenda) enxergam o clipe começando no tempo 0.
+    # Com -ss depois do -i, a legenda era desenhada no tempo do replay e saía fora de sincronia.
+    cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{inicio:.3f}", "-t", f"{duracao:.3f}",
+           "-f", "concat", "-safe", "0", "-i", os.path.abspath(lista),
            "-filter_complex", grafo, "-map", "[v]"]
     if primeiro_seg is None or tem_audio(ffprobe, primeiro_seg):
         cmd += ["-map", "0:a:0?", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
