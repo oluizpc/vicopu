@@ -85,7 +85,7 @@ def _ler_wav(caminho):
     return np.frombuffer(dados, dtype=np.int16).astype(np.float32) / 32768.0
 
 
-PROMPT = """Você é o editor de cortes de um canal de clipes de lives (gameplay, foco em GTA 6).
+PROMPT = """Você é o editor de cortes de um canal de clipes de lives.{foco}
 Recebe a transcrição de um trecho de {dur:.0f}s da live de "{canal}" (tempos em segundos desde o início do trecho)
 e uma amostra do chat no momento do pico. Decida se vira um Short/TikTok e prepare a publicação.
 
@@ -153,6 +153,7 @@ def julgar(cfg, canal, palavras, amostra_chat, duracao):
     try:
         import anthropic
         prompt = PROMPT.format(
+            foco=(f" Foco do canal: {ia['foco']}." if ia.get("foco") else ""),
             dur=duracao, canal=nome, maxd=cfg["corte"]["duracao_maxima"], fixas=fixas or "(nenhuma)",
             extras=("- " + ia["instrucoes_extras"]) if ia["instrucoes_extras"] else "",
             transcricao=_texto_transcricao(palavras),

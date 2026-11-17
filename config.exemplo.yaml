@@ -37,6 +37,7 @@ ia:
   modelo: claude-haiku-5-5       # rápido e barato; troque por claude-sonnet-5-5 se quiser mais capricho
   respeitar_descarte: true       # se o Claude disser que o trecho é fraco, não publica
   camauto_claude: true           # layout auto: se a detecção grátis de rosto falhar, pergunta ao Claude
+  foco: "GTA 6"                  # o Claude prioriza esse assunto (deixe "" pra qualquer conteúdo)
   instrucoes_extras: "Evite títulos com spoiler da história principal do GTA 6."
 
 publicacao:
