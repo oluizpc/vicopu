@@ -54,6 +54,30 @@ class Vigia:
         self.automatico = canal["layout"] == "auto" or canal.get("facecam") == "auto"
         self.layout_atual = "blur" if self.automatico else canal["layout"]
         self.facecam_atual = None if self.automatico else canal.get("facecam")
+        if self.automatico:
+            salva = self._cam_salva()
+            if salva:  # usa a cam achada na última vez já no primeiro corte (e confere de novo depois)
+                self.layout_atual, self.facecam_atual = "split", salva
+                self.log.info("Usando a cam achada da última vez: %s", salva)
+
+    def _arquivo_cam(self):
+        return os.path.join(self.cfg["geral"]["pasta_trabalho"], "camauto", f"{self.canal['nome']}.json")
+
+    def _cam_salva(self):
+        try:
+            with open(self._arquivo_cam(), encoding="utf-8") as f:
+                caixa = json.load(f)
+            return caixa if all(k in caixa for k in ("x", "y", "w", "h")) else None
+        except (OSError, ValueError, TypeError):
+            return None
+
+    def _salvar_cam(self, caixa):
+        try:
+            os.makedirs(os.path.dirname(self._arquivo_cam()), exist_ok=True)
+            with open(self._arquivo_cam(), "w", encoding="utf-8") as f:
+                json.dump(caixa, f)
+        except OSError:
+            pass
 
     def iniciar(self):
         self.captura.start()
@@ -85,10 +109,18 @@ class Vigia:
                 self.buffer.soltar(segs)
             if caixa:
                 self.layout_atual, self.facecam_atual = "split", caixa
+                self._salvar_cam(caixa)
+                self.log.info("Layout automático: split")
+                self.captura.parar_evt.wait(15 * 60)
+            elif self.facecam_atual:
+                # não achou agora (streamer saiu da frente da cam, cena de transição...):
+                # mantém a cam que já funcionava e tenta de novo em 2 min
+                self.log.info("Não achei a cam agora; mantendo a anterior e tentando de novo em 2 min.")
+                self.captura.parar_evt.wait(120)
             else:
-                self.layout_atual, self.facecam_atual = "blur", None
-            self.log.info("Layout automático: %s", self.layout_atual)
-            self.captura.parar_evt.wait(15 * 60)
+                self.layout_atual = "blur"
+                self.log.info("Layout automático: blur (sem cam achada; tento de novo em 2 min)")
+                self.captura.parar_evt.wait(120)
 
     def parar(self):
         self.captura.parar()
