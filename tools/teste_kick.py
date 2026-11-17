@@ -2,6 +2,7 @@
 
 Uso:  python tools\\teste_kick.py 16543790          (número da sala do chat)
       python tools\\teste_kick.py 16543790 sem-origin
+      python tools\\teste_kick.py 16543790 chave=32cbd69e4b950bf97679   (testar outra chave)
 """
 import json
 import sys
@@ -11,7 +12,8 @@ import websocket
 
 sala = sys.argv[1] if len(sys.argv) > 1 else "16543790"
 com_origin = "sem-origin" not in sys.argv
-url = ("wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679"
+chave = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("chave=")), "34bf7a0ff419a2a775b9")
+url = (f"wss://ws-us2.pusher.com/app/{chave}"
        "?protocol=7&client=js&version=8.4.0&flash=false")
 cabecalho = ["Origin: https://kick.com"] if com_origin else []
 
@@ -22,7 +24,7 @@ def log(*a):
     print(f"[{time.time() - t0:5.1f}s]", *a, flush=True)
 
 
-log("conectando", "(com Origin)" if com_origin else "(sem Origin)")
+log("chave", chave, "| conectando", "(com Origin)" if com_origin else "(sem Origin)")
 ws = websocket.create_connection(url, timeout=30, header=cabecalho)
 log("conectado")
 assinou = False

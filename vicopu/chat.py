@@ -135,12 +135,50 @@ class ChatKick(LeitorChat):
                 f"kick_chatroom_id no config deste canal.")
         return int(r.json()["chatroom"]["id"])
 
+    _chave_cache = None  # (chave, cluster) descoberta, compartilhada entre canais da Kick
+
+    def _credenciais(self):
+        """Chave do Pusher que a Kick usa agora. A Kick troca a chave de tempos em tempos
+        (em out/2026 aposentou a antiga), então pergunta pro mesmo endpoint que o site usa
+        e, se falhar, fica com a do config."""
+        k = self.cfg["kick"]
+        if ChatKick._chave_cache:
+            return ChatKick._chave_cache
+        if k.get("descobrir_chave", True):
+            try:
+                corpo = {"capabilities": {"accepted_providers": [{"provider": "pusher"}]}}
+                url = "https://web.kick.com/api/v1/realtime/connection"
+                try:
+                    from curl_cffi import requests as creq
+                    r = creq.post(url, json=corpo, impersonate="chrome", timeout=15)
+                except ImportError:
+                    import requests
+                    r = requests.post(url, json=corpo, timeout=15)
+                texto = r.text if r.status_code == 200 else ""
+                chave = re.search(r'"(?:app_?key|key)"\s*:\s*"([0-9a-f]{20})"', texto)
+                cluster = re.search(r'"cluster"\s*:\s*"([a-z0-9-]{2,8})"', texto)
+                if not chave:  # formato diferente: pega a chave de dentro de uma URL ws-xx.pusher.com/app/<chave>
+                    m = re.search(r"ws-([a-z0-9-]+)\.pusher\.com/app/([0-9a-f]{20})", texto)
+                    if m:
+                        cluster, chave = m.group(1), m.group(2)
+                        ChatKick._chave_cache = (chave, cluster)
+                        return ChatKick._chave_cache
+                if chave:
+                    ChatKick._chave_cache = (chave.group(1),
+                                             cluster.group(1) if cluster else k["pusher_cluster"])
+                    if ChatKick._chave_cache[0] != k["pusher_key"]:
+                        self.log.info("Kick usa chave nova do chat: %s (%s)", *ChatKick._chave_cache)
+                    return ChatKick._chave_cache
+            except Exception as e:  # noqa: BLE001
+                self.log.debug("Não consegui perguntar a chave do chat à Kick: %s", e)
+        return k["pusher_key"], k["pusher_cluster"]
+
     def ler(self):
         import websocket  # websocket-client
 
         sala = self._id_sala()
-        k = self.cfg["kick"]
-        url = (f"wss://ws-{k['pusher_cluster']}.pusher.com/app/{k['pusher_key']}"
+        chave, cluster = self._credenciais()
+        url = (f"wss://ws-{cluster}.pusher.com/app/{chave}"
                f"?protocol=7&client=js&version=8.4.0&flash=false")
         ws = websocket.create_connection(url, timeout=120, header=[
             "Origin: https://kick.com",
@@ -156,6 +194,11 @@ class ChatKick(LeitorChat):
                 continue
             if isinstance(primeira, dict) and primeira.get("event") == "pusher:connection_established":
                 break
+            if isinstance(primeira, dict) and primeira.get("event") == "pusher:error":
+                ChatKick._chave_cache = None  # chave recusada: pergunta de novo na próxima tentativa
+                ws.close()
+                raise RuntimeError(f"Kick recusou a chave do chat ({chave}): "
+                                   f"{(primeira.get('data') or {}).get('message', '')}")
         ws.send(json.dumps({"event": "pusher:subscribe",
                             "data": {"auth": "", "channel": f"chatrooms.{sala}.v2"}}))
         self.log.info("Chat da Kick conectado (sala %s)", sala)

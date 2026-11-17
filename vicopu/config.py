@@ -65,7 +65,7 @@ PADROES = {
     },
     "youtube_app": {"client_secrets": "./credenciais/youtube_client_secret.json"},
     "tiktok_app": {"client_key": "", "client_secret": "", "redirect_uri": ""},
-    "kick": {"pusher_key": "32cbd69e4b950bf97679", "pusher_cluster": "us2"},
+    "kick": {"pusher_key": "34bf7a0ff419a2a775b9", "pusher_cluster": "us2", "descobrir_chave": True},
     "contas": {"youtube": {}, "tiktok": {}},
     "canais": [],
 }
