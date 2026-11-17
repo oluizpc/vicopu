@@ -66,6 +66,13 @@ details{font-size:12px;color:var(--sub)}summary{cursor:pointer;user-select:none}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(30px);opacity:0;transition:.25s;
 background:var(--txt);color:#111;padding:10px 16px;border-radius:10px;font-weight:700;z-index:9}
 #toast.on{opacity:1;transform:translateX(-50%)}
+.marca{position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:8px;border:2px solid rgba(255,255,255,.75);
+background:rgba(0,0,0,.55);display:grid;place-items:center;cursor:pointer;font-weight:900;color:transparent;user-select:none}
+.marca:hover{border-color:#fff}.clip.sel{border-color:var(--roxo);box-shadow:0 0 0 2px var(--roxo)}
+.clip.sel .marca{background:var(--roxo);border-color:var(--roxo);color:#fff}
+#lote{position:sticky;top:58px;z-index:4;display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card2);
+border:1px solid var(--roxo);border-radius:12px;padding:8px 10px;margin-bottom:12px}
+#lote.on{display:flex}#lote .qtd{font-weight:800;margin-right:4px}
 @media(max-width:640px){header{flex-wrap:wrap;padding:10px 14px;gap:8px}.cresce{display:none}
 .resumo{width:100%;justify-content:space-between;font-size:12px;gap:8px}.resumo span{white-space:nowrap}
 main{padding:14px}.lives,.grade{grid-template-columns:1fr}}
@@ -76,6 +83,12 @@ main{padding:14px}.lives,.grade{grid-template-columns:1fr}}
 <h2>Lives</h2><div class="lives" id="lives"></div>
 <h2>Clipes</h2>
 <div class="abas" id="abas"></div>
+<div id="lote"><span class="qtd" id="lote_qtd"></span>
+<button class="btn" onclick="selTodos()">Selecionar todos da aba</button>
+<button class="btn verde" onclick="emLote('publicar')">Publicar</button>
+<button class="btn" onclick="emLote('descartar')">Descartar</button>
+<button class="btn perigo" onclick="emLote('excluir')">🗑 Excluir</button>
+<span class="cresce"></span><button class="btn fant" onclick="limparSel()">✕ Limpar seleção</button></div>
 <div class="grade" id="grade"></div>
 </main><div id="toast"></div>
 <script>
@@ -84,7 +97,7 @@ publicando:"Publicando…",pronto:"Pronto",descartado:"Descartado",descartado_ia
 const ABAS=[["pendentes","Aguardando você",s=>["pendente","pronto","erro"].includes(s)],
 ["andamento","Em andamento",s=>["renderizando","publicando"].includes(s)],
 ["publicados","Publicados",s=>s==="publicado"],["descartados","Descartados",s=>s.startsWith("descartado")],["todos","Todos",s=>true]];
-let aba=localStorage.getItem("vicopu_aba")||"pendentes", estado=null;
+let aba=localStorage.getItem("vicopu_aba")||"pendentes", estado=null, sel=new Set(), ultimoSel=null;
 const $=s=>document.querySelector(s), esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),2200)}
 async function post(url,corpo){const r=await fetch(url,{method:"POST",body:corpo||""});const t=await r.text();if(!r.ok){toast("⚠ "+t);throw t}return t}
@@ -104,8 +117,8 @@ return`<div class="live"><div class="nome"><span class="dot ${l.no_ar?"on":""}">
 function card(c){const st=c.status||"";const podeEditar=["pendente","pronto","erro"].includes(st);
 const video=c.tem_video?`<video controls preload="metadata" src="/video/${c.id}"></video>`:
 `<div class="vazio">${st==="renderizando"?"Montando o clipe…":"Sem vídeo (não foi montado)"}</div>`;
-return`<div class="clip ${st==="pendente"?"destaque":""}" data-id="${c.id}">
-<div class="midia">${video}<div class="selo">${c.duracao?`<span>${Math.round(c.duracao)}s</span>`:""}${c.nota_ia!=null&&c.motivo_ia!=="sem IA"?`<span>${nota(c.nota_ia)}</span>`:""}</div></div>
+return`<div class="clip ${st==="pendente"?"destaque":""} ${sel.has(c.id)?"sel":""}" data-id="${c.id}">
+<div class="midia">${video}<div class="marca" title="Selecionar" onclick="alternar('${c.id}',event)">✓</div><div class="selo">${c.duracao?`<span>${Math.round(c.duracao)}s</span>`:""}${c.nota_ia!=null&&c.motivo_ia!=="sem IA"?`<span>${nota(c.nota_ia)}</span>`:""}</div></div>
 <div class="corpo"><div class="linha"><span class="status st-${esc(st)}">${esc(NOMES[st]||st)}</span>
 <b style="color:var(--txt)">${esc(c.canal)}</b> · há ${ha(c.criado)}${c.manual?" · manual":""}</div>
 <textarea id="t_${c.id}" ${podeEditar?"":"readonly"} onchange="salvarTitulo('${c.id}')">${esc(c.titulo)}</textarea>
@@ -138,9 +151,10 @@ function render(){$("#modo").innerHTML=`modo <b>${esc(estado.modo)}</b>`;
 const p=estado.clipes.filter(c=>["pendente","pronto","erro"].includes(c.status)).length,
 pub=estado.clipes.filter(c=>c.status==="publicado").length,ao=estado.lives.filter(l=>l.no_ar).length;
 $("#resumo").innerHTML=`<span><b>${ao}</b>/${estado.lives.length} ao vivo</span><span><b>${p}</b> aguardando</span><span><b>${pub}</b> publicados</span>`;
-document.title=(p?`(${p}) `:"")+"VICOPU";renderLives();renderClipes()}
+document.title=(p?`(${p}) `:"")+"VICOPU";const ids=new Set(estado.clipes.map(c=>c.id));
+[...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});renderLives();renderClipes();pintarSel()}
 async function atualizar(){try{estado=await (await fetch("/api/estado")).json();render()}catch(e){}}
-function trocar(k){aba=k;localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
+function trocar(k){aba=k;sel.clear();localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
 async function cortar(n){await post("/cortar/"+encodeURIComponent(n));toast("✂ Corte pedido em "+n+". Sai em ~1 min.");setTimeout(atualizar,1500)}
 async function salvarTitulo(id){await post("/titulo/"+id,$("#t_"+id).value.trim());toast("Título salvo")}
 async function publicar(id){const t=$("#t_"+id).value.trim();await post("/aprovar/"+id,t);toast("Publicando…");atualizar()}
@@ -151,6 +165,22 @@ async function copiar(id){const c=estado.clipes.find(x=>x.id===id);const tags=[.
 .map(t=>t.startsWith("#")?t:"#"+t);const txt=($("#t_"+id).value.trim()+" "+[...new Set(tags)].join(" ")).trim();
 try{await navigator.clipboard.writeText(txt)}catch(e){const a=document.createElement("textarea");a.value=txt;document.body.appendChild(a);a.select();document.execCommand("copy");a.remove()}
 toast("📋 Título + hashtags copiados")}
+function listaAba(){const f=ABAS.find(a=>a[0]===aba)[2];return estado.clipes.filter(c=>f(c.status||""))}
+function pintarSel(){document.querySelectorAll(".clip").forEach(el=>el.classList.toggle("sel",sel.has(el.dataset.id)));
+const n=sel.size;$("#lote").classList.toggle("on",n>0);$("#lote_qtd").textContent=n+" selecionado"+(n==1?"":"s")}
+function alternar(id,ev){ev.stopPropagation();
+if(ev.shiftKey&&ultimoSel){const ids=listaAba().map(c=>c.id),a=ids.indexOf(ultimoSel),b=ids.indexOf(id);
+if(a>=0&&b>=0){ids.slice(Math.min(a,b),Math.max(a,b)+1).forEach(x=>sel.add(x));ultimoSel=id;pintarSel();return}}
+sel.has(id)?sel.delete(id):sel.add(id);ultimoSel=id;pintarSel()}
+function selTodos(){listaAba().forEach(c=>sel.add(c.id));pintarSel()}
+function limparSel(){sel.clear();pintarSel()}
+async function emLote(acao){const ids=[...sel];if(!ids.length)return;
+const nomes={publicar:"Publicar",descartar:"Descartar",excluir:"EXCLUIR do painel e do disco"};
+if(!confirm(`${nomes[acao]} ${ids.length} clipe(s)?`))return;
+const r=JSON.parse(await post("/lote/"+acao,JSON.stringify(ids)));const p=Object.keys(r.pulados).length;
+toast(`${r.feitos} feito(s)`+(p?` · ${p} pulado(s): ${[...new Set(Object.values(r.pulados))].join(", ")}`:""));
+sel.clear();$("#grade")._ass=null;atualizar()}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&sel.size)limparSel()});
 atualizar();setInterval(atualizar,4000);
 </script></body></html>"""
 
@@ -232,6 +262,10 @@ def iniciar(fabrica, vigias, host, porta):
                     fabrica.descartar(_seguro(alvo))
                 elif acao == "excluir":
                     fabrica.excluir(_seguro(alvo))
+                elif acao == "lote":
+                    ids = [_seguro(i) for i in json.loads(corpo or "[]") if isinstance(i, str)]
+                    r = fabrica.lote(alvo, ids)
+                    return self._enviar(200, json.dumps(r, ensure_ascii=False), "application/json; charset=utf-8")
                 elif acao == "limpar" and alvo == "descartados":
                     fabrica.limpar_descartados()
                 else:

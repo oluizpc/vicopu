@@ -268,6 +268,34 @@ class Fabrica:
         self.log.info("Limpeza: %d clipe(s) descartado(s) apagado(s).", n)
         return n
 
+    def lote(self, acao, ids):
+        """Aplica uma ação em vários clipes. Os que não podem receber a ação são pulados (com o motivo)."""
+        feitos, pulados = 0, {}
+        for cid in ids:
+            try:
+                if acao == "publicar":
+                    meta = self.ler(cid)
+                    if not os.path.exists(meta.get("video", "") or ""):
+                        raise RuntimeError("sem vídeo")
+                    if meta.get("status") not in ("pendente", "pronto", "erro"):
+                        raise RuntimeError("já publicado ou em andamento")
+                    self.publicar_async(cid)
+                elif acao == "descartar":
+                    if self.ler(cid).get("status") not in ("pendente", "pronto", "erro"):
+                        raise RuntimeError("não pode ser descartado nesse estado")
+                    self.descartar(cid)
+                elif acao == "excluir":
+                    self.excluir(cid)
+                else:
+                    raise ValueError(f"ação desconhecida: {acao}")
+                feitos += 1
+            except FileNotFoundError:
+                pulados[cid] = "não encontrado"
+            except (RuntimeError, ValueError) as e:
+                pulados[cid] = str(e)
+        self.log.info("Lote '%s': %d feito(s), %d pulado(s).", acao, feitos, len(pulados))
+        return {"feitos": feitos, "pulados": pulados}
+
     def descartar(self, cid):
         meta = self.ler(cid)
         meta["status"] = "descartado"
