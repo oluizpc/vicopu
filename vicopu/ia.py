@@ -92,7 +92,8 @@ e uma amostra do chat no momento do pico. Decida se vira um Short/TikTok e prepa
 Regras:
 - publicar=false se o trecho for parado, sem contexto, ou o pico do chat claramente não tem a ver com a live.
 - "inicio" e "fim": recorte o melhor pedaço DENTRO do trecho (15 a {maxd}s), começando no gancho, sem enrolação no começo e terminando logo depois da reação/punchline.
-- titulo: até 80 caracteres, em português do Brasil, estilo corte viral (gancho forte, pode usar CAIXA ALTA em 1-2 palavras e 1 emoji). Não invente coisas que não estão na transcrição.
+- titulo: SEMPRE um título de corte pronto pra postar, MESMO quando publicar=false (o humano pode decidir postar). Nunca escreva o motivo ou a avaliação no título. Até 80 caracteres, em português do Brasil, estilo corte viral (gancho forte, pode usar CAIXA ALTA em 1-2 palavras e 1 emoji). Não invente coisas que não estão na transcrição.
+- motivo: aqui sim, explique a avaliação.
 - descricao: 1-2 frases curtas.
 - hashtags: 3 a 5, sem repetir as fixas: {fixas}.
 {extras}
@@ -115,7 +116,7 @@ FERRAMENTA_JUIZ = {
             "nota": {"type": "number", "description": "0 a 10"},
             "inicio": {"type": "number", "description": "segundos desde o início do trecho"},
             "fim": {"type": "number", "description": "segundos desde o início do trecho"},
-            "titulo": {"type": "string"},
+            "titulo": {"type": "string", "description": "título do clipe pronto pra postar (nunca o motivo da nota)"},
             "descricao": {"type": "string"},
             "hashtags": {"type": "array", "items": {"type": "string"}},
             "motivo": {"type": "string"},
