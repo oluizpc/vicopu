@@ -28,7 +28,12 @@ def autorizar(cfg, conta, porta=8090, abrir_navegador=True):
     print(f"\nVai abrir o login do Google. Entre com a conta e ESCOLHA O CANAL '{conta}' onde os Shorts vão sair.\n"
           f"Se o navegador não abrir, copie o link que aparecer abaixo.\n"
           f"(Num servidor sem tela: use --sem-navegador e faça 'ssh -L {porta}:localhost:{porta} seu_servidor'.)\n")
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")  # aceita se a pessoa desmarcar alguma permissão
     cred = fluxo.run_local_server(port=porta, open_browser=abrir_navegador, prompt="consent")
+    concedidos = set(getattr(cred, "granted_scopes", None) or cred.scopes or [])
+    if concedidos and not any(x.endswith("youtube.readonly") for x in concedidos):
+        print("\nATENÇÃO: a permissão de VER os dados do canal não foi marcada. O upload funciona, mas o painel\n"
+              "não vai mostrar views/likes/comentários. Rode de novo e marque todas as caixinhas na tela do Google.\n")
     destino = caminho_token(cfg, conta)
     os.makedirs(os.path.dirname(destino), exist_ok=True)
     with open(destino, "w") as f:
@@ -93,9 +98,11 @@ def estatisticas(cfg, conta, ids):
         try:
             resp = yt.videos().list(part="statistics,status", id=",".join(ids[i:i + 50])).execute()
         except HttpError as e:
-            if getattr(e, "status_code", None) == 403 or "insufficient" in str(e).lower():
+            texto = str(e)
+            if "insufficient" in texto.lower() or "SCOPE_INSUFFICIENT" in texto:
                 raise SemPermissaoDeLeitura(conta) from e
-            raise
+            motivo = getattr(e, "reason", "") or texto
+            raise RuntimeError(f"YouTube recusou ({getattr(e, 'status_code', '?')}): {motivo}") from e
         for item in resp.get("items", []):
             st = item.get("statistics", {})
             saida[item["id"]] = {"views": int(st.get("viewCount", 0) or 0),
