@@ -227,8 +227,18 @@ class Fabrica:
         self.salvar(meta)
         self.log.info("%s -> %s", meta["id"], meta["resultados"])
 
+    def destinos_atuais(self, meta):
+        """Destinos do clipe; se o clipe não tinha nenhum, usa o publicar_em atual do canal no config."""
+        if meta.get("destinos"):
+            return meta["destinos"]
+        canal = next((c for c in self.cfg["canais"] if c["nome"] == meta.get("canal")), None)
+        return list(canal.get("publicar_em", [])) if canal else []
+
     def publicar_async(self, cid, titulo=None):
         meta = self.ler(cid)
+        meta["destinos"] = self.destinos_atuais(meta)
+        if not meta["destinos"]:
+            raise ValueError(f"o canal '{meta.get('canal')}' não tem destino: coloque publicar_em no config.yaml")
         if meta["status"] in ("pendente", "pronto", "erro"):
             self.pool.submit(self.publicar, meta, titulo)
 

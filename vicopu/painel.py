@@ -110,12 +110,14 @@ return`<div class="clip ${st==="pendente"?"destaque":""}" data-id="${c.id}">
 <b style="color:var(--txt)">${esc(c.canal)}</b> · há ${ha(c.criado)}${c.manual?" · manual":""}</div>
 <textarea id="t_${c.id}" ${podeEditar?"":"readonly"} onchange="salvarTitulo('${c.id}')">${esc(c.titulo)}</textarea>
 <div class="acoes">
-${podeEditar&&c.tem_video?`<button class="btn verde" onclick="publicar('${c.id}')" ${c.destinos&&c.destinos.length?"":"disabled title='Nenhum destino em publicar_em'"}>Publicar</button>`:""}
+${podeEditar&&c.tem_video?`<button class="btn verde" onclick="publicar('${c.id}')" ${c.destinos&&c.destinos.length?`title="Publicar em: ${esc(c.destinos.join(", "))}"`:"disabled"}>Publicar</button>`:""}
 ${c.tem_video?`<a class="btn" href="/baixar/${c.id}">⬇ Baixar</a>`:""}
 <button class="btn" onclick="copiar('${c.id}')">📋 Copiar</button>
 ${podeEditar?`<button class="btn fant" onclick="descartar('${c.id}')">Descartar</button>`:""}
 ${["renderizando","publicando"].includes(st)?"":`<button class="btn fant perigo" title="Excluir do painel e do disco" onclick="excluir('${c.id}')">🗑</button>`}
 </div>
+${podeEditar&&c.tem_video&&!(c.destinos&&c.destinos.length)?`<div class="res">⚠ Sem destino pra publicar: coloque <b>publicar_em</b> no canal <b>${esc(c.canal)}</b> no config.yaml e reinicie. Ou use Baixar/Copiar e poste na mão.</div>`:""}
+${c.destinos&&c.destinos.length&&podeEditar?`<div class="res">Vai pra: ${esc(c.destinos.join(", "))}</div>`:""}
 ${c.resultados&&Object.keys(c.resultados).length?`<div class="res">${resultados(c.resultados)}</div>`:""}
 <details><summary>Por que esse clipe?</summary><p>${esc(c.motivo)}</p>${c.motivo_ia&&c.motivo_ia!=="sem IA"?`<p><b>IA:</b> ${esc(c.motivo_ia)}</p>`:""}</details>
 </div></div>`}
@@ -169,6 +171,7 @@ def iniciar(fabrica, vigias, host, porta):
         for m in fabrica.listar()[:200]:
             m = dict(m)
             m["tem_video"] = os.path.exists(m.get("video", "") or "")
+            m["destinos"] = fabrica.destinos_atuais(m)
             clipes.append(m)
         return {"modo": fabrica.cfg["publicacao"]["modo"], "lives": lives, "clipes": clipes}
 
