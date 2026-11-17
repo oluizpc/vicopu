@@ -403,6 +403,8 @@ Pra nunca usar o Claude nessa parte: `ia: {camauto_claude: false}`.
 
 ---
 
+**Patrocínio grudado na cam:** quando a cam não tem moldura clara, o VICOPU pede a posição ao Claude e depois faz uma **2ª conferência com zoom**: manda o pedaço ampliado da tela em dois momentos diferentes, pra o Claude separar a câmera de banners de propaganda que ficam logo embaixo ou do lado (e que trocam de imagem). Se o rosto foi achado no PC, ele também serve de régua: a caixa não passa de cabeça e ombros.
+
 ## 11. Placa de vídeo
 
 - **Montagem dos clipes:** na largada, o VICOPU testa e usa a placa que funcionar: **NVIDIA (NVENC)**, **AMD (AMF)** ou **Intel (QuickSync)**. Se nenhuma funcionar, usa o processador. O log mostra a escolha: `Montagem dos vídeos: usando ...`. Se a placa falhar no meio de um clipe, ele refaz no processador sozinho. Pra forçar uma: `corte: {encoder: amd}` (ou `nvidia`, `intel`, `cpu`).

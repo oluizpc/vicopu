@@ -18,7 +18,10 @@ log = logging.getLogger("camauto")
 LARG, ALT = 640, 360  # resolução de análise (rápida)
 
 PROMPT = """Esta é uma imagem de uma live (jogo/stream). Encontre a WEBCAM do streamer: a janela onde aparece a pessoa REAL filmada pela câmera (não personagens do jogo, não avatares, não fotos estáticas, não emotes, não pessoas dentro de um vídeo que o streamer está assistindo/reagindo).
-Responda usando a ferramenta informar_cam. Coordenadas em frações da imagem (0 a 1), cobrindo exatamente a área do vídeo da câmera (sem banners, nomes, chat ou molduras decorativas em volta). Se não houver webcam de pessoa real, use tem_cam=false."""
+Responda usando a ferramenta informar_cam. Coordenadas em frações da imagem (0 a 1), cobrindo exatamente a área do vídeo da câmera.
+NÃO inclua nada que esteja colado na cam: banners de patrocínio/propaganda, produtos, logos, nomes, metas, alertas, chat, contadores ou molduras decorativas. Esses elementos costumam ficar logo abaixo ou ao lado da cam; a caixa termina onde a imagem da câmera termina.
+Se a cam não tiver moldura clara (a pessoa aparece recortada sobre o jogo), faça uma caixa justa em volta da pessoa: cabeça inteira (com folga acima do cabelo) e ombros.
+Se não houver webcam de pessoa real, use tem_cam=false."""
 
 FERRAMENTA_CAM = {
     "name": "informar_cam",
@@ -137,8 +140,9 @@ def moldura_a_partir_do_rosto(rosto, cinzas):
     perfil_y = (gy[:, faixa_x] > limiar).mean(axis=1)
 
     achados = []
+    lados_achados = {}  # lado -> posição (px) onde achou moldura de verdade (ou a borda da tela)
 
-    def procurar(perfil, de, ate, padrao, borda_tela):
+    def procurar(perfil, de, ate, padrao, borda_tela, lado=None):
         de, ate = int(round(de)), int(round(ate))
         passo = 1 if ate >= de else -1
         idx = list(range(de, ate + passo, passo))
@@ -146,21 +150,28 @@ def moldura_a_partir_do_rosto(rosto, cinzas):
         fortes = [i for i in idx if perfil[i] >= 0.8]  # linha quase inteira = moldura
         if fortes:
             achados.append(True)
+            lados_achados[lado] = fortes[0]
             return fortes[0]  # a primeira moldura saindo do rosto
         achados.append(borda_tela is not None)  # colada na borda da tela também conta como achada
+        if borda_tela is not None:
+            lados_achados[lado] = borda_tela
         return borda_tela if borda_tela is not None else padrao
 
     tx0, ty0 = tipica["x"] * LARG, tipica["y"] * ALT
     tx1, ty1 = (tipica["x"] + tipica["w"]) * LARG, (tipica["y"] + tipica["h"]) * ALT
     folga_x, folga_y = 0.05 * LARG, 0.05 * ALT
-    x0 = procurar(perfil_x, fx0 - 0.15 * fw, tx0 - folga_x, tx0, 0 if tx0 - folga_x <= 0 else None)
-    x1 = procurar(perfil_x, fx1 + 0.15 * fw, tx1 + folga_x, tx1, LARG - 1 if tx1 + folga_x >= LARG - 1 else None)
-    y0 = procurar(perfil_y, fy0 - 0.15 * fh, ty0 - folga_y, ty0, 0 if ty0 - folga_y <= 0 else None)
-    y1 = procurar(perfil_y, fy1 + 0.15 * fh, ty1 + folga_y, ty1, ALT - 1 if ty1 + folga_y >= ALT - 1 else None)
+    x0 = procurar(perfil_x, fx0 - 0.15 * fw, tx0 - folga_x, tx0, 0 if tx0 - folga_x <= 0 else None, "x0")
+    x1 = procurar(perfil_x, fx1 + 0.15 * fw, tx1 + folga_x, tx1, LARG - 1 if tx1 + folga_x >= LARG - 1 else None, "x1")
+    y0 = procurar(perfil_y, fy0 - 0.15 * fh, ty0 - folga_y, ty0, 0 if ty0 - folga_y <= 0 else None, "y0")
+    y1 = procurar(perfil_y, fy1 + 0.15 * fh, ty1 + folga_y, ty1, ALT - 1 if ty1 + folga_y >= ALT - 1 else None, "y1")
     # a diferença (diff) fica entre o pixel i e i+1: a área da cam começa em i+1 (esq/topo) e acaba em i (dir/baixo)
     x0, y0 = (x0 + 1 if x0 > 0 else 0), (y0 + 1 if y0 > 0 else 0)
     x0, y0, x1, y1 = x0 + 1, y0 + 1, x1 - 1, y1 - 1  # recua 1 px pra não pegar a linha da moldura
     lados = sum(achados)
+    # posições das molduras achadas, em frações (pra conferir a caixa do Claude depois)
+    escala = {"x0": LARG, "x1": LARG, "y0": ALT, "y1": ALT}
+    rosto["_molduras"] = {k: (v + (1 if k in ("x0", "y0") and v > 0 else 0)) / escala[k]
+                          for k, v in lados_achados.items()}
     if x1 - x0 < fw or y1 - y0 < fh:
         return tipica, 0
     return {"x": round(max(0, x0) / LARG, 4), "y": round(max(0, y0) / ALT, 4),
@@ -206,6 +217,63 @@ def perguntar_claude(jpeg, modelo):
     if caixa["w"] < 0.03 or caixa["h"] < 0.03:
         return {"tem_cam": False}
     return {"tem_cam": True, **caixa}
+
+
+PROMPT_ZOOM = """As duas imagens são o MESMO recorte da tela de uma live, em dois momentos diferentes. Nesse recorte está a WEBCAM do streamer (a pessoa real filmada pela câmera).
+Marque com a ferramenta informar_cam a caixa EXATA só do vídeo da câmera, em frações deste recorte (0 a 1).
+Fique de fora: banners de patrocínio/propaganda, produtos, logos, textos, alertas, chat e molduras decorativas, mesmo que estejam grudados na cam. Dica: o que muda de imagem inteira entre os dois momentos (propaganda que troca) ou que é arte estática NÃO é a câmera.
+Se a cam não tiver moldura (pessoa recortada sobre o jogo), faça uma caixa justa: cabeça inteira e ombros."""
+
+
+def _recorte_jpeg(ffmpeg, segmento, regiao, largura=900):
+    """JPEG de um pedaço da tela (regiao em frações), ampliado pra o Claude enxergar os detalhes."""
+    x, y, w, h = (regiao[k] for k in ("x", "y", "w", "h"))
+    filtro = (f"scale=1920:1080,crop=iw*{w:.4f}:ih*{h:.4f}:iw*{x:.4f}:ih*{y:.4f},"
+              f"scale={largura}:-2")
+    r = subprocess.run([ffmpeg, "-v", "error", "-i", segmento, "-frames:v", "1", "-vf", filtro,
+                        "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "3", "-"], capture_output=True)
+    return r.stdout or None
+
+
+def zoom_claude(ffmpeg, segmentos, caixa, modelo):
+    """2ª passada: amplia a região da cam (2 momentos diferentes) e pede a caixa exata ao Claude.
+    Pega banners de patrocínio colados na cam, que na tela inteira passam despercebidos."""
+    if not segmentos or not caixa or not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    # região = caixa com folga de 50% de cada lado
+    fx, fy = 0.5 * caixa["w"], 0.5 * caixa["h"]
+    x0, y0 = max(0.0, caixa["x"] - fx), max(0.0, caixa["y"] - fy)
+    x1, y1 = min(1.0, caixa["x"] + caixa["w"] + fx), min(1.0, caixa["y"] + caixa["h"] + fy)
+    regiao = {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
+    imgs = [_recorte_jpeg(ffmpeg, segmentos[0], regiao), _recorte_jpeg(ffmpeg, segmentos[-1], regiao)]
+    imgs = [i for i in imgs if i]
+    if not imgs:
+        return None
+    import anthropic
+    conteudo = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                             "data": base64.b64encode(i).decode()}} for i in imgs]
+    conteudo.append({"type": "text", "text": PROMPT_ZOOM})
+    r = anthropic.Anthropic().messages.create(
+        model=modelo, max_tokens=300, tools=[FERRAMENTA_CAM],
+        tool_choice={"type": "tool", "name": "informar_cam"},
+        messages=[{"role": "user", "content": conteudo}])
+    dados = next((b.input for b in r.content if getattr(b, "type", "") == "tool_use"), None)
+    return _de_volta_pra_tela(dados, regiao)
+
+
+def _de_volta_pra_tela(dados, regiao):
+    """Converte a caixa (frações do recorte) pra frações da tela inteira, conferindo se faz sentido."""
+    if not dados or not dados.get("tem_cam"):
+        return None
+    try:
+        cx, cy, cw, ch = (min(1.0, max(0.0, float(dados[k]))) for k in ("x", "y", "w", "h"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    cw, ch = min(cw, 1.0 - cx), min(ch, 1.0 - cy)
+    if cw < 0.08 or ch < 0.08:  # caixa minúscula dentro do recorte: resposta estranha, ignora
+        return None
+    return {"x": round(regiao["x"] + cx * regiao["w"], 4), "y": round(regiao["y"] + cy * regiao["h"], 4),
+            "w": round(cw * regiao["w"], 4), "h": round(ch * regiao["h"], 4)}
 
 
 def _melhor_linha(perfil, centro, fora, dentro, sentido):
@@ -278,6 +346,44 @@ def refinar(caixa, cinzas):
             "w": round((x1 - x0) / LARG, 4), "h": round((y1 - y0) / ALT, 4)}
 
 
+def ajustar_pelo_rosto(caixa, rosto):
+    """Usa o rosto achado no PC como âncora pra caixa do Claude não 'vazar' pra banners colados na cam.
+
+    Uma webcam enquadra cabeça e ombros: em volta do rosto cabem ~1,3 rosto acima, ~2 abaixo e
+    ~2,2 de cada lado. O que passar disso (patrocínio embaixo da cam, chat do lado...) é cortado.
+    """
+    if not caixa or not rosto:
+        return caixa
+    fx0, fy0, fw, fh = rosto["x"], rosto["y"], rosto["w"], rosto["h"]
+    fx1, fy1 = fx0 + fw, fy0 + fh
+    x0, y0 = caixa["x"], caixa["y"]
+    x1, y1 = x0 + caixa["w"], y0 + caixa["h"]
+    if not (x0 - 0.02 <= fx0 and fx1 <= x1 + 0.02 and y0 - 0.02 <= fy0 and fy1 <= y1 + 0.02):
+        # a caixa nem contém o rosto: confia no rosto
+        return caixa_em_volta_do_rosto(rosto)
+    # 1) molduras reais achadas saindo do rosto (ex.: a borda de cima de um banner de patrocínio
+    #    logo abaixo do queixo) mandam mais que o palpite do Claude, se forem mais justas
+    mold = rosto.get("_molduras") or {}
+    if "x0" in mold and fx0 - 0.02 > mold["x0"] > x0:
+        x0 = mold["x0"]
+    if "x1" in mold and fx1 + 0.02 < mold["x1"] < x1:
+        x1 = mold["x1"]
+    if "y0" in mold and fy0 - 0.02 > mold["y0"] > y0:
+        y0 = mold["y0"]
+    if "y1" in mold and fy1 + 0.01 < mold["y1"] < y1:
+        y1 = mold["y1"]
+    # 2) limite de enquadramento: cabeça e ombros
+    nx0 = max(x0, fx0 - 2.2 * fw)
+    nx1 = min(x1, fx1 + 2.2 * fw)
+    ny0 = max(y0, fy0 - 1.3 * fh)
+    ny1 = min(y1, fy1 + 2.0 * fh)
+    novo = {"x": round(max(0.0, nx0), 4), "y": round(max(0.0, ny0), 4),
+            "w": round(min(1.0, nx1) - max(0.0, nx0), 4), "h": round(min(1.0, ny1) - max(0.0, ny0), 4)}
+    if novo != {k: round(caixa[k], 4) for k in ("x", "y", "w", "h")}:
+        log.info("Cam ajustada pelo rosto (cortei o que passava de cabeça e ombros): %s -> %s", caixa, novo)
+    return novo
+
+
 def salvar_previa(ffmpeg, segmento, caixa, destino):
     """Imagem com um retângulo verde onde o VICOPU achou a cam (pra você conferir)."""
     os.makedirs(os.path.dirname(destino), exist_ok=True)
@@ -305,9 +411,11 @@ def detectar(cfg, caminhos_segmentos, nome_canal):
             log.info("[%s] Rosto achado no meio da tela (pode ser o vídeo de um react). Confirmando com o Claude...",
                      nome_canal)
             rosto = None
+    ancora = None  # rosto achado no PC, usado pra conferir a caixa do Claude
     if rosto:
         final, lados = moldura_a_partir_do_rosto(rosto, cinzas)
         if lados < 3 and usa_claude:
+            ancora = rosto
             # a cam não tem moldura clara (encosta direto no fundo/chat): o tamanho exato fica com o Claude
             log.info("[%s] Rosto achado, mas a cam não tem moldura clara (%d de 4 lados). Confirmando com o Claude...",
                      nome_canal, lados)
@@ -337,6 +445,16 @@ def detectar(cfg, caminhos_segmentos, nome_canal):
             return None
         bruta, fonte = {k: resposta[k] for k in ("x", "y", "w", "h")}, "Claude"
     final = refinar(bruta, cinzas)
+    try:  # 2ª passada com zoom: tira patrocínio/banner grudado na cam
+        ampliada = zoom_claude(ff, caminhos_segmentos, final, cfg["ia"]["modelo"])
+    except Exception as e:  # noqa: BLE001
+        log.info("[%s] Zoom na cam não rolou (%s); fico com a 1ª caixa.", nome_canal, e)
+        ampliada = None
+    if ampliada:
+        log.info("[%s] Cam conferida com zoom: %s -> %s", nome_canal, final, ampliada)
+        final, fonte = ampliada, "Claude + zoom"
+    if ancora:
+        final = ajustar_pelo_rosto(final, ancora)
     log.info("[%s] Cam encontrada (%s): %s", nome_canal, fonte, final)
     destino = os.path.join(cfg["geral"]["pasta_trabalho"], "camauto", f"{nome_canal}.jpg")
     salvar_previa(ff, caminhos_segmentos[len(caminhos_segmentos) // 2], final, destino)
