@@ -240,7 +240,16 @@ A lista de **todas** as opções está na [seção 17](#17-referência-completa-
 
 Abra **http://127.0.0.1:8787** com o VICOPU ligado. A página atualiza sozinha a cada 4 segundos e **não perde o que você está digitando**.
 
-**Lives:** cada uma tem plataforma, status (ao vivo ou offline), layout, sensibilidade, número de clipes e o botão **✂ Cortar agora**, que corta na hora sem depender do chat.
+**Lives:** cada uma tem plataforma, status (ao vivo ou offline), layout, sensibilidade, número de clipes e os botões **✂ Cortar agora**, que corta na hora sem depender do chat, e **⏹ Parar**, que para de vigiar aquela live.
+
+**➕ Adicionar live (sem parar as outras):** um streamer abriu live do nada? Cole o link (Twitch, Kick ou YouTube), escolha a sensibilidade e o idioma da legenda e clique em **Vigiar**. As outras lives continuam rodando, sem perder nenhum clipe. A live nova:
+- usa a cam automática;
+- publica no mesmo destino do primeiro canal do config;
+- fica salva em `dados/canais_painel.yaml` e volta sozinha quando você reiniciar. Pra tirar, use **⏹ Parar**.
+
+Parar uma live que está no `config.yaml` vale só até reiniciar; pra tirar de vez, apague do config.
+
+**Descartados pela IA** também têm vídeo: dá pra assistir, ler o motivo do descarte e publicar mesmo assim, se a IA errou.
 
 **Clipes**, separados em abas: **Aguardando você · Em andamento · Publicados · Descartados · Todos**.
 

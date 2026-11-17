@@ -33,6 +33,11 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);m
 .dot{width:9px;height:9px;border-radius:50%;background:#555;flex:none}.dot.on{background:var(--verde);box-shadow:0 0 0 4px rgba(34,197,94,.15)}
 .plat{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;color:#fff}
 .plat.twitch{background:#9146ff}.plat.youtube{background:#e11d48}.plat.kick{background:#16a34a}.plat.arquivo{background:#555}
+.nova{background:var(--card);border:1px dashed var(--borda);border-radius:14px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--txt)}
+.nova summary{font-weight:700}.nova .form{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.nova input,.nova select{background:var(--card2);color:var(--txt);border:1px solid var(--borda);border-radius:9px;padding:8px 10px;font:inherit;min-width:0}
+.nova .dica{color:var(--sub);font-size:12px;margin-top:8px}
+.live .acoes2{display:flex;gap:8px;align-items:center}
 .live .info{color:var(--sub);font-size:12px}
 .btn{border:0;border-radius:9px;padding:8px 12px;font-weight:650;font-size:13px;cursor:pointer;color:var(--txt);background:var(--card2);
 display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
@@ -87,7 +92,15 @@ main{padding:14px}.lives,.grade{grid-template-columns:1fr}}
 <header><div class="logo">VI<span>CO</span>PU</div><div class="modo" id="modo"></div><div class="cresce"></div>
 <div class="resumo" id="resumo"></div></header>
 <main>
-<h2>Lives</h2><div class="lives" id="lives"></div>
+<h2>Lives</h2>
+<details id="nova" class="nova"><summary>➕ Adicionar live (sem parar as outras)</summary>
+<div class="form"><input id="n_link" placeholder="Link da live: twitch.tv/..., kick.com/..., youtube.com/@..." style="flex:3 1 280px">
+<input id="n_apelido" placeholder="Nome no crédito (opcional)" style="flex:1 1 160px">
+<select id="n_sens"><option value="normal">sensibilidade normal</option><option value="alta">alta (chat calmo)</option><option value="baixa">baixa (streamer gigante)</option></select>
+<select id="n_idioma"><option value="padrao">legenda: padrão</option><option value="pt">português</option><option value="en">inglês</option><option value="es">espanhol</option><option value="auto">detectar</option></select>
+<button class="btn roxo" onclick="addLive()">Vigiar</button></div>
+<div class="dica">Começa a vigiar na hora, com a cam automática. Publica no mesmo destino do primeiro canal do config. Fica salva pra próxima vez (em dados/canais_painel.yaml).</div></details>
+<div class="lives" id="lives"></div>
 <h2>Clipes</h2>
 <div class="abas" id="abas"></div>
 <div id="lote"><span class="qtd" id="lote_qtd"></span>
@@ -126,8 +139,14 @@ return`<div class="live"><div class="nome"><span class="dot ${l.no_ar?"on":""}">
 <span class="plat ${esc(l.plataforma)}">${esc(l.plataforma)}</span></div>
 <div class="info">${l.no_ar?"Ao vivo":"Offline / conectando"} · layout ${l.automatico?`<a href="/camauto/${encodeURIComponent(l.nome)}" target="_blank">${esc(l.layout)} (auto)</a>`:esc(l.layout)}
  · sensibilidade ${esc(l.sensibilidade)} · ${n} clipe${n==1?"":"s"}</div>
-<div><button class="btn roxo" ${l.no_ar?"":"disabled"} onclick="cortar('${esc(l.nome)}')">✂ Cortar agora</button></div></div>`}).join("")||
-`<div class="vazia">Nenhuma live no config.</div>`}
+<div class="acoes2"><button class="btn roxo" ${l.no_ar?"":"disabled"} onclick="cortar('${esc(l.nome)}')">✂ Cortar agora</button>
+<button class="btn fant perigo" title="Parar de vigiar esta live" onclick="pararLive('${esc(l.nome)}',${l.do_painel})">⏹ Parar</button></div></div>`}).join("")||
+`<div class="vazia">Nenhuma live: adicione uma acima.</div>`}
+async function addLive(){const link=$("#n_link").value.trim();if(!link){toast("Cole o link da live");return}
+const nome=await post("/live/adicionar",JSON.stringify({link,apelido:$("#n_apelido").value,sensibilidade:$("#n_sens").value,idioma:$("#n_idioma").value}));
+$("#n_link").value="";$("#n_apelido").value="";toast("👀 Vigiando "+nome+". A cam é achada em ~1 min.");atualizar()}
+async function pararLive(n,doPainel){if(!confirm(doPainel?`Parar de vigiar ${n} e tirar da lista?`:`Parar de vigiar ${n}? (está no config.yaml: volta quando reiniciar o VICOPU)`))return;
+await post("/parar/"+encodeURIComponent(n));toast("⏹ "+n+" parada");atualizar()}
 function card(c){const st=c.status||"";const descartado=st.startsWith("descartado");
 const podeEditar=["pendente","pronto","erro"].includes(st)||descartado;
 const video=c.tem_video?`<video controls preload="metadata" src="/video/${c.id}"></video>`:
@@ -206,13 +225,12 @@ def _seguro(nome):
     return re.sub(r"[^\w\-]", "", nome)
 
 
-def iniciar(fabrica, vigias, host, porta):
-    por_nome = {v.canal["nome"]: v for v in vigias}
+def iniciar(fabrica, central, host, porta):
 
     def estado():
-        lives = [{"nome": n, "plataforma": v.canal["plataforma"], "no_ar": v.no_ar(),
-                  "layout": v.layout_atual, "automatico": v.automatico,
-                  "sensibilidade": v.canal.get("sensibilidade", "normal")} for n, v in por_nome.items()]
+        lives = [{"nome": v.canal["nome"], "plataforma": v.canal["plataforma"], "no_ar": v.no_ar(),
+                  "layout": v.layout_atual, "automatico": v.automatico, "do_painel": bool(v.canal.get("do_painel")),
+                  "sensibilidade": v.canal.get("sensibilidade", "normal")} for v in central.lista()]
         clipes = []
         for m in fabrica.listar()[:200]:
             m = dict(m)
@@ -269,11 +287,18 @@ def iniciar(fabrica, vigias, host, porta):
             acao, alvo = partes[0], urllib.parse.unquote(partes[1])
             try:
                 if acao == "cortar":
-                    if alvo not in por_nome:
+                    vig = central.por_nome(alvo)
+                    if not vig:
                         return self._enviar(404, "live não encontrada", "text/plain; charset=utf-8")
-                    if not por_nome[alvo].no_ar():
+                    if not vig.no_ar():
                         return self._enviar(409, "essa live não está no ar", "text/plain; charset=utf-8")
-                    por_nome[alvo].detector.manual("botão 'cortar agora' no painel")
+                    vig.detector.manual("botão 'cortar agora' no painel")
+                elif acao == "live" and alvo == "adicionar":
+                    dados = json.loads(corpo or "{}")
+                    nome = central.adicionar(dados if isinstance(dados, dict) else {})
+                    return self._enviar(200, nome, "text/plain; charset=utf-8")
+                elif acao == "parar":
+                    central.remover(alvo)
                 elif acao == "aprovar":
                     fabrica.publicar_async(_seguro(alvo), corpo.strip() or None)
                 elif acao == "titulo":
@@ -292,7 +317,7 @@ def iniciar(fabrica, vigias, host, porta):
                     return self._enviar(404, "?", "text/plain")
             except FileNotFoundError:
                 return self._enviar(404, "clipe não encontrado", "text/plain; charset=utf-8")
-            except (RuntimeError, ValueError) as e:
+            except (RuntimeError, ValueError) as e:  # json inválido também cai aqui
                 return self._enviar(409, str(e), "text/plain; charset=utf-8")
             self._enviar(200, "ok", "text/plain")
 

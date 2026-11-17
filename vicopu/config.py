@@ -2,6 +2,7 @@
 import copy
 import os
 import re
+import urllib.parse
 
 import yaml
 
@@ -94,22 +95,86 @@ def _mesclar(base, extra):
     return saida
 
 
+def preparar_canal(cfg, c):
+    """Confere e completa um canal (do config ou do painel)."""
+    if "nome" not in c or "plataforma" not in c or "canal" not in c:
+        raise ValueError(f"Canal incompleto (precisa de nome, plataforma e canal): {c}")
+    c.setdefault("layout", cfg["corte"]["layout_padrao"])
+    c.setdefault("publicar_em", [])
+    c.setdefault("hashtags", [])
+    return c
+
+
+def arquivo_canais_painel(cfg):
+    return os.path.join(cfg["geral"]["pasta_trabalho"], "canais_painel.yaml")
+
+
+def ler_canais_painel(cfg):
+    """Canais adicionados pelo painel com o VICOPU rodando (ficam salvos fora do config.yaml)."""
+    try:
+        with open(arquivo_canais_painel(cfg), encoding="utf-8") as f:
+            dados = yaml.safe_load(f) or []
+        return [c for c in dados if isinstance(c, dict)]
+    except OSError:
+        return []
+
+
+def salvar_canais_painel(cfg, canais):
+    os.makedirs(cfg["geral"]["pasta_trabalho"], exist_ok=True)
+    with open(arquivo_canais_painel(cfg), "w", encoding="utf-8") as f:
+        f.write("# Canais adicionados pelo painel. Pode apagar daqui ou pelo painel.\n")
+        yaml.safe_dump(canais, f, allow_unicode=True, sort_keys=False)
+
+
 def carregar(caminho):
     with open(caminho, encoding="utf-8") as f:
         bruto = yaml.safe_load(f) or {}
     cfg = _expandir(_mesclar(PADROES, bruto))
     nomes = set()
     for c in cfg["canais"]:
-        if "nome" not in c or "plataforma" not in c or "canal" not in c:
-            raise ValueError(f"Canal incompleto no config (precisa de nome, plataforma e canal): {c}")
+        preparar_canal(cfg, c)
         if c["nome"] in nomes:
             raise ValueError(f"Nome de canal repetido: {c['nome']}")
         nomes.add(c["nome"])
-        c.setdefault("layout", cfg["corte"]["layout_padrao"])
-        c.setdefault("publicar_em", [])
-        c.setdefault("hashtags", [])
     os.makedirs(cfg["geral"]["pasta_trabalho"], exist_ok=True)
+    for c in ler_canais_painel(cfg):
+        if c.get("nome") in nomes:
+            continue  # o config.yaml manda
+        try:
+            preparar_canal(cfg, c)
+        except ValueError:
+            continue
+        c["do_painel"] = True
+        cfg["canais"].append(c)
+        nomes.add(c["nome"])
     return cfg
+
+
+def canal_do_link(link):
+    """Transforma um link colado no painel em plataforma + canal + nome."""
+    link = (link or "").strip()
+    if not link:
+        raise ValueError("cole o link da live")
+    if not link.startswith("http"):
+        link = "https://" + link
+    u = urllib.parse.urlparse(link)
+    host = u.netloc.lower().replace("www.", "").replace("m.", "", 1 if u.netloc.lower().startswith("m.") else 0)
+    partes = [p for p in u.path.split("/") if p]
+    if host.endswith("twitch.tv") and partes:
+        slug = partes[0].lower()
+        return {"plataforma": "twitch", "canal": slug, "nome": slug}
+    if host.endswith("kick.com") and partes:
+        slug = partes[0].lower()
+        return {"plataforma": "kick", "canal": slug, "nome": slug}
+    if host.endswith("youtube.com") or host == "youtu.be":
+        if partes and partes[0].startswith("@"):
+            slug = partes[0]
+            return {"plataforma": "youtube", "canal": slug, "nome": slug[1:]}
+        vid = urllib.parse.parse_qs(u.query).get("v", [None])[0] or (partes[-1] if partes else None)
+        if vid:
+            return {"plataforma": "youtube", "canal": f"https://www.youtube.com/watch?v={vid}",
+                    "nome": f"yt_{vid[:8]}"}
+    raise ValueError("não reconheci o link: use um link da Twitch, Kick ou YouTube")
 
 
 def link_do_canal(canal):

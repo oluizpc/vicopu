@@ -3,6 +3,7 @@ import glob
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -347,3 +348,81 @@ class Fabrica:
         meta = self.ler(cid)
         meta["status"] = "descartado"
         self.salvar(meta)
+
+
+class Central:
+    """Lista de lives vigiadas, que pode mudar com o VICOPU rodando (adicionar/parar pelo painel)."""
+
+    def __init__(self, cfg, fabrica):
+        self.cfg, self.fabrica = cfg, fabrica
+        self.trava = threading.Lock()
+        self.log = logging.getLogger("vicopu")
+        self.vigias = [Vigia(c, cfg, fabrica) for c in cfg["canais"]]
+
+    def lista(self):
+        with self.trava:
+            return list(self.vigias)
+
+    def por_nome(self, nome):
+        return next((v for v in self.lista() if v.canal["nome"] == nome), None)
+
+    def iniciar(self):
+        for v in self.lista():
+            v.iniciar()
+
+    def _salvar_do_painel(self):
+        from .config import salvar_canais_painel
+        guardar = [{k: v for k, v in c.items() if k not in ("do_painel", "removido")}
+                   for c in self.cfg["canais"] if c.get("do_painel") and not c.get("removido")]
+        salvar_canais_painel(self.cfg, guardar)
+
+    def adicionar(self, dados):
+        from .config import canal_do_link, preparar_canal
+        canal = canal_do_link(dados.get("link"))
+        apelido = (dados.get("apelido") or "").strip()
+        if apelido:
+            canal["apelido"] = apelido[:60]
+        nome = re.sub(r"[^\w\-]", "", (dados.get("nome") or canal["nome"]).strip())[:40] or "live"
+        canal["nome"] = nome
+        canal["layout"] = "auto"
+        sens = str(dados.get("sensibilidade") or "normal").lower()
+        if sens not in SENSIBILIDADES:
+            raise ValueError("sensibilidade inválida")
+        canal["sensibilidade"] = sens
+        idioma = (dados.get("idioma") or "").strip().lower()
+        if idioma and idioma != "padrao":
+            canal["idioma"] = "" if idioma == "auto" else idioma[:5]
+        # destino: o mesmo do primeiro canal do config (pra não publicar em lugar inesperado)
+        base = next((c for c in self.cfg["canais"] if c.get("publicar_em")), None)
+        canal["publicar_em"] = list(base["publicar_em"]) if base else []
+        if base and base.get("hashtags"):
+            canal["hashtags"] = list(base["hashtags"])
+        preparar_canal(self.cfg, canal)
+        with self.trava:
+            if any(v.canal["nome"] == nome for v in self.vigias):
+                raise ValueError(f"já existe uma live chamada '{nome}'")
+            self.cfg["canais"] = [c for c in self.cfg["canais"]
+                                  if not (c.get("removido") and c["nome"] == nome)]
+            canal["do_painel"] = True
+            self.cfg["canais"].append(canal)
+            v = Vigia(canal, self.cfg, self.fabrica)
+            self.vigias.append(v)
+        v.iniciar()
+        self._salvar_do_painel()
+        self.log.info("Live adicionada pelo painel: %s (%s %s)", nome, canal["plataforma"], canal["canal"])
+        return nome
+
+    def remover(self, nome):
+        with self.trava:
+            v = next((x for x in self.vigias if x.canal["nome"] == nome), None)
+            if not v:
+                raise ValueError("live não encontrada")
+            self.vigias.remove(v)
+            do_painel = bool(v.canal.get("do_painel"))
+            if do_painel:
+                v.canal["removido"] = True  # some do arquivo, mas o crédito dos clipes antigos continua
+        v.parar()
+        if do_painel:
+            self._salvar_do_painel()
+        self.log.info("Parei de vigiar %s%s", nome,
+                      "" if do_painel else " (está no config.yaml: volta quando reiniciar)")

@@ -24,31 +24,32 @@ from . import config as cfgmod
 
 def rodar(cfg):
     from . import painel
-    from .nucleo import Fabrica, Vigia
+    from .nucleo import Central, Fabrica
 
     if not shutil.which(cfg["geral"]["ffmpeg"]):
         sys.exit("ffmpeg não encontrado. Instale e deixe no PATH (ou ajuste geral.ffmpeg no config).")
     if not cfg["canais"]:
-        sys.exit("Nenhum canal no config. Adicione em 'canais:'.")
+        logging.getLogger("vicopu").warning("Nenhum canal no config: adicione lives pelo painel.")
     from . import corte
     corte.encoder_video(cfg["geral"]["ffmpeg"], cfg["corte"].get("encoder", "auto"))  # descobre a placa já na largada
     fabrica = Fabrica(cfg)
-    vigias = [Vigia(c, cfg, fabrica) for c in cfg["canais"]]
-    for v in vigias:
-        v.iniciar()
+    central = Central(cfg, fabrica)
+    central.iniciar()
     p = cfg["publicacao"]
-    painel.iniciar(fabrica, vigias, p["painel_host"], p["painel_porta"])
+    painel.iniciar(fabrica, central, p["painel_host"], p["painel_porta"])
     log = logging.getLogger("vicopu")
-    log.info("VICOPU no ar: %d canal(is). Painel em http://%s:%s  (Ctrl+C para sair)",
-             len(vigias), p["painel_host"], p["painel_porta"])
+    extras = sum(1 for c in cfg["canais"] if c.get("do_painel"))
+    log.info("VICOPU no ar: %d canal(is)%s. Painel em http://%s:%s  (Ctrl+C para sair)",
+             len(central.lista()), f" ({extras} adicionado(s) pelo painel)" if extras else "",
+             p["painel_host"], p["painel_porta"])
     try:
         while True:
-            for v in vigias:
+            for v in central.lista():
                 v.detector.tick()
             time.sleep(1)
     except KeyboardInterrupt:
         log.info("Desligando...")
-        for v in vigias:
+        for v in central.lista():
             v.parar()
         fabrica.pool.shutdown(wait=False, cancel_futures=True)
         logging.shutdown()
