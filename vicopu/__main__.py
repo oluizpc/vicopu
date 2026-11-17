@@ -9,6 +9,12 @@ Uso:
 import argparse
 import logging
 import os
+
+# avisos inofensivos da biblioteca que baixa o modelo de legenda (Windows sem symlinks, sem token)
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
+import warnings  # noqa: E402
+warnings.filterwarnings("ignore", module="huggingface_hub")
 import shutil
 import sys
 import time
@@ -42,6 +48,9 @@ def rodar(cfg):
         log.info("Desligando...")
         for v in vigias:
             v.parar()
+        fabrica.pool.shutdown(wait=False, cancel_futures=True)
+        logging.shutdown()
+        os._exit(0)  # sai na hora, sem esperar corte/download pela metade
 
 
 def testar_layout(cfg, nome, video):
@@ -80,8 +89,9 @@ def main():
     cfg = cfgmod.carregar(args.config)
     logging.basicConfig(level=cfg["geral"]["log_nivel"],
                         format="%(asctime)s %(levelname)-7s [%(name)s] %(message)s", datefmt="%H:%M:%S")
-    for barulhento in ("httpx", "httpx2", "httpcore", "huggingface_hub", "faster_whisper", "googleapiclient"):
-        logging.getLogger(barulhento).setLevel(logging.WARNING)  # esconde o log interno das bibliotecas
+    for barulhento in ("httpx", "httpx2", "httpcore", "faster_whisper", "googleapiclient"):
+        logging.getLogger(barulhento).setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)  # esconde o log interno das bibliotecas
     if args.cmd == "rodar":
         rodar(cfg)
     elif args.cmd == "auth-youtube":
