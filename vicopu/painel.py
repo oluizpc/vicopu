@@ -142,7 +142,7 @@ bip();toast(`🎬 ${novos.length} clipe(s) novo(s) pra revisar`);
 if("Notification" in window&&Notification.permission==="granted"&&document.hidden){novos.slice(0,3).forEach(c=>{try{const n=new Notification("VICOPU: clipe de "+c.canal,{body:c.titulo||"",tag:c.id});n.onclick=()=>{window.focus();n.close()}}catch(e){}})}}
 const $=s=>document.querySelector(s), esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),2200)}
-async function post(url,corpo){const r=await fetch(url,{method:"POST",body:corpo||""});const t=await r.text();if(!r.ok){toast("⚠ "+t);throw t}return t}
+async function post(url,corpo){if(document.activeElement&&document.activeElement.tagName==="BUTTON")document.activeElement.blur();const r=await fetch(url,{method:"POST",body:corpo||""});const t=await r.text();if(!r.ok){toast("⚠ "+t);throw t}return t}
 function ha(seg){const d=Math.max(0,Date.now()/1000-seg);if(d<60)return"agora";if(d<3600)return Math.floor(d/60)+" min";
 if(d<86400)return Math.floor(d/3600)+" h";return Math.floor(d/86400)+" d"}
 function nota(n){if(n==null)return"";const c=n>=7?"boa":n>=4?"media":"ruim";return`<span class="nota ${c}">IA ${n}/10</span>`}
@@ -244,6 +244,7 @@ const vivos=new Set([...grade.querySelectorAll(".clip")].filter(el=>el.contains(
 const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+(c.descricao||"")+(c.credito||"")+JSON.stringify(c.resultados||{})+(c.versao||"")+JSON.stringify(c.numeros||c.numeros_erro||"")).join("|")+aba+filtroCanal;
 if(grade._ass===assinatura)return;
 if(vivos.size&&lista.every(c=>grade.querySelector(`[data-id="${c.id}"]`))){
+const ids=new Set(lista.map(c=>c.id));grade.querySelectorAll(".clip").forEach(el=>{if(!ids.has(el.dataset.id))el.remove()});
 lista.forEach(c=>{if(!vivos.has(c.id)){const el=grade.querySelector(`[data-id="${c.id}"]`);el.outerHTML=card(c)}});grade._ass=assinatura;reabrir();return}
 grade.innerHTML=lista.length?lista.map(card).join(""):`<div class="vazia">Nada por aqui${aba==="pendentes"?" — quando sair um clipe, ele aparece aqui pra você aprovar.":"."}</div>`;
 grade._ass=assinatura;reabrir()}
