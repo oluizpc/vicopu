@@ -6,6 +6,7 @@ import json
 import os
 import re
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -236,7 +237,9 @@ document.title=(p?`(${p}) `:"")+"VICOPU";const ids=new Set(estado.clipes.map(c=>
 [...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});avisarNovos();pintarSino();if(!$("#lives").contains(document.activeElement))renderLives();renderClipes();pintarSel()}
 async function atualizar(){try{estado=await (await fetch("/api/estado")).json();render()}catch(e){}}
 function trocar(k){aba=k;sel.clear();localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
-async function cortar(n){await post("/cortar/"+encodeURIComponent(n));toast("✂ Corte pedido em "+n+". Sai em ~1 min.");setTimeout(atualizar,1500)}
+async function cortar(n){const b=event&&event.target;if(b){b.disabled=true;b.textContent="✂ Pedido!"}
+try{await post("/cortar/"+encodeURIComponent(n));toast("✂ Corte pedido em "+n+". Sai em ~1 min (no notebook pode levar mais).")}catch(e){}
+setTimeout(atualizar,1500)}
 async function salvarTitulo(id){await post("/titulo/"+id,$("#t_"+id).value.trim());toast("Título salvo")}
 async function publicar(id){const t=$("#t_"+id).value.trim();await post("/aprovar/"+id,t);toast("Publicando…");atualizar()}
 async function descartar(id){await post("/descartar/"+id);toast("Descartado");atualizar()}
@@ -343,6 +346,11 @@ def iniciar(fabrica, central, host, porta):
                         return self._enviar(404, "live não encontrada", "text/plain; charset=utf-8")
                     if not vig.no_ar():
                         return self._enviar(409, "essa live não está no ar", "text/plain; charset=utf-8")
+                    falta = 20 - (time.time() - getattr(vig, "ultimo_manual", 0))
+                    if falta > 0:
+                        return self._enviar(409, "já pedi um corte dessa live agora há pouco; ele sai em ~1 min "
+                                                 f"(dá pra pedir outro em {falta:.0f} s)", "text/plain; charset=utf-8")
+                    vig.ultimo_manual = time.time()
                     vig.detector.manual("botão 'cortar agora' no painel")
                 elif acao == "live" and alvo == "adicionar":
                     dados = json.loads(corpo or "{}")

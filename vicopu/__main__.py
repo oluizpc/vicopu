@@ -74,6 +74,23 @@ def testar_layout(cfg, nome, video):
     print(f"Teste salvo em {saida}. Ajuste 'facecam' (x, y, w, h em frações da tela) até a cam ficar certinha.")
 
 
+def _desligar_selecao_do_console():
+    """No Windows, clicar/selecionar texto no Prompt de Comando (QuickEdit) CONGELA o programa
+    até apertar uma tecla: o VICOPU parava de cortar e o painel travava. Desliga isso nesta janela.
+    (Pra copiar o log, use o arquivo dados/vicopu.log.)"""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.GetStdHandle(-10)  # entrada do console
+        modo = ctypes.c_uint32()
+        if k.GetConsoleMode(h, ctypes.byref(modo)):
+            k.SetConsoleMode(h, (modo.value & ~0x0040) | 0x0080)  # tira QUICK_EDIT, mantém EXTENDED_FLAGS
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def main():
     ap = argparse.ArgumentParser(prog="vicopu", description="VICOPU: vigia, corta e publica.")
     ap.add_argument("-c", "--config", default="config.yaml")
@@ -93,6 +110,18 @@ def main():
     cfg = cfgmod.carregar(args.config)
     logging.basicConfig(level=cfg["geral"]["log_nivel"],
                         format="%(asctime)s %(levelname)-7s [%(name)s] %(message)s", datefmt="%H:%M:%S")
+    if args.cmd == "rodar":
+        _desligar_selecao_do_console()
+        try:  # cópia do log em arquivo (dados/vicopu.log), pra mandar/consultar sem copiar do terminal
+            from logging.handlers import RotatingFileHandler
+            arq = RotatingFileHandler(os.path.join(cfg["geral"]["pasta_trabalho"], "vicopu.log"),
+                                      maxBytes=5_000_000, backupCount=2, encoding="utf-8")
+            arq.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s [%(name)s] %(message)s",
+                                               datefmt="%Y-%m-%d %H:%M:%S"))
+            logging.getLogger().addHandler(arq)
+        except OSError:
+            pass
+
     for barulhento in ("httpx", "httpx2", "httpcore", "faster_whisper", "googleapiclient"):
         logging.getLogger(barulhento).setLevel(logging.WARNING)
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)  # esconde o log interno das bibliotecas

@@ -450,6 +450,8 @@ O `git pull` não mexe no `config.yaml`, na pasta `dados` (clipes e autorizaçõ
 
 ## 14. Lendo o log
 
+O log também é salvo em **`dados\vicopu.log`** (com data e hora). Pra mandar ou consultar o log, abra esse arquivo em vez de selecionar texto no terminal: o VICOPU desliga a seleção com o mouse na janela dele, porque no Windows selecionar texto no Prompt **congela o programa** até apertar uma tecla.
+
 | Mensagem | O que quer dizer |
 |---|---|
 | `Montagem dos vídeos: usando placa AMD (AMF).` | qual placa vai montar os clipes |
