@@ -266,6 +266,15 @@ def detectar(cfg, caminhos_segmentos, nome_canal):
 
     # 1) grátis: detecção de rosto no próprio PC
     rosto = achar_rosto_local(extrair_cinza_hd(ff, caminhos_segmentos))
+    usa_claude = cfg["ia"].get("camauto_claude", True) and bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if rosto and usa_claude:
+        centro = rosto["x"] + rosto["w"] / 2
+        if 0.3 < centro < 0.7:
+            # rosto no meio da tela costuma ser CONTEÚDO (react, vídeo, cutscene), não a webcam:
+            # nesse caso quem decide é o Claude, que entende o layout inteiro
+            log.info("[%s] Rosto achado no meio da tela (pode ser o vídeo de um react). Confirmando com o Claude...",
+                     nome_canal)
+            rosto = None
     if rosto:
         final = moldura_a_partir_do_rosto(rosto, cinzas)
         log.info("[%s] Cam encontrada (rosto local, grátis): %s", nome_canal, final)
