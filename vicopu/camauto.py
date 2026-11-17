@@ -78,18 +78,28 @@ def achar_rosto_local(quadros):
             caixas.append((L - x - w, y, w, h))
         achados += [(i, int(x), int(y), int(w), int(h)) for (x, y, w, h) in caixas]
     # agrupa rostos no mesmo lugar (centro a menos de 4% da tela) e conta em quantos quadros aparecem
-    melhor, melhor_qtd = None, 0
+    precisa = max(2, int(np.ceil(len(quadros) * 0.6)))
+    candidatos = []
     for _, x, y, w, h in achados:
         cx, cy = x + w / 2, y + h / 2
         grupo = [a for a in achados if abs(a[1] + a[3] / 2 - cx) < 0.04 * L and abs(a[2] + a[4] / 2 - cy) < 0.04 * A]
         qtd = len({a[0] for a in grupo})
-        if qtd > melhor_qtd or (qtd == melhor_qtd and melhor and w > melhor[2]):
-            melhor_qtd = qtd
-            melhor = tuple(int(np.median([a[k] for a in grupo])) for k in (1, 2, 3, 4))
-    precisa = max(2, int(np.ceil(len(quadros) * 0.6)))
-    if not melhor or melhor_qtd < precisa:
+        if qtd >= precisa:
+            caixa = tuple(int(np.median([a[k] for a in grupo])) for k in (1, 2, 3, 4))
+            if caixa not in [c[1] for c in candidatos]:
+                candidatos.append((qtd, caixa))
+    if not candidatos:
         return None
-    x, y, w, h = melhor
+    # Mais de um rosto parado (ex.: react, com o vídeo reagido no meio da tela): a webcam do streamer
+    # quase sempre fica num canto. Ganha quem aparece em mais quadros; no empate, o mais perto da lateral.
+    def nota(c):
+        qtd, (x, y, w, h) = c
+        dist_lateral = min(x + w / 2, L - (x + w / 2)) / L  # 0 = colado na lateral, 0.5 = no meio
+        return (qtd, -dist_lateral)
+    _, (x, y, w, h) = max(candidatos, key=nota)
+    if len(candidatos) > 1:
+        log.info("Achei %d rostos parados na tela; escolhi o mais perto da lateral (provável webcam).",
+                 len(candidatos))
     return {"x": x / L, "y": y / A, "w": w / L, "h": h / A}
 
 
