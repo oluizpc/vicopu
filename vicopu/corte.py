@@ -1,6 +1,10 @@
 """CORTA: recorta do replay e monta o vídeo vertical 1080x1920 (Shorts/TikTok) com legenda."""
+import logging
 import os
 import subprocess
+import threading
+
+log = logging.getLogger("corte")
 
 L, A = 1080, 1920  # largura x altura do vertical
 ALTURA_CAM = 640   # altura da faixa da facecam no layout "split"
@@ -108,8 +112,65 @@ def gerar_ass(palavras, caminho, y, max_palavras=3, max_dur=1.3):
     return caminho
 
 
+# ---------- codificador de vídeo: placa de vídeo quando der, processador quando não ----------
+# ordem de tentativa no modo "auto": NVIDIA (NVENC), AMD (AMF), Intel (QuickSync), processador (x264)
+ENCODERS = {
+    "nvidia": "h264_nvenc",
+    "amd": "h264_amf",
+    "intel": "h264_qsv",
+    "cpu": "libx264",
+}
+_escolhido = {}
+_trava_enc = threading.Lock()
+
+
+def _args_encoder(enc, crf):
+    if enc == "h264_nvenc":
+        return ["-c:v", enc, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(crf + 2), "-b:v", "0",
+                "-maxrate", "8M", "-bufsize", "16M"]
+    if enc == "h264_amf":
+        return ["-c:v", enc, "-quality", "balanced", "-rc", "vbr_peak", "-b:v", "6M", "-maxrate", "8M",
+                "-bufsize", "16M"]
+    if enc == "h264_qsv":
+        return ["-c:v", enc, "-global_quality", str(crf + 2), "-maxrate", "8M", "-bufsize", "16M"]
+    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-maxrate", "8M", "-bufsize", "16M"]
+
+
+def _funciona(ffmpeg, enc):
+    """Codifica 1 segundinho de teste pra ver se essa placa existe e funciona nesta máquina."""
+    r = subprocess.run([ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1080x1920:r=30:d=0.5",
+                        *_args_encoder(enc, 21), "-pix_fmt", "yuv420p", "-f", "null", "-"],
+                       capture_output=True, timeout=60)
+    return r.returncode == 0
+
+
+def encoder_video(ffmpeg, preferencia="auto"):
+    """Escolhe (uma vez só) o codificador de vídeo desta máquina."""
+    preferencia = (preferencia or "auto").lower()
+    with _trava_enc:
+        if preferencia in _escolhido:
+            return _escolhido[preferencia]
+        if preferencia in ENCODERS:
+            candidatos = [ENCODERS[preferencia]] if preferencia == "cpu" else [ENCODERS[preferencia], "libx264"]
+        else:
+            candidatos = [ENCODERS[k] for k in ("nvidia", "amd", "intel", "cpu")]
+        for enc in candidatos:
+            if enc == "libx264" or _funciona(ffmpeg, enc):
+                break
+        nomes = {"h264_nvenc": "placa NVIDIA (NVENC)", "h264_amf": "placa AMD (AMF)",
+                 "h264_qsv": "Intel QuickSync", "libx264": "processador (x264)"}
+        log.info("Montagem dos vídeos: usando %s.", nomes[enc])
+        _escolhido[preferencia] = enc
+        return enc
+
+
+def _desistir_da_placa(preferencia):
+    with _trava_enc:
+        _escolhido[(preferencia or "auto").lower()] = "libx264"
+
+
 def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", facecam=None,
-               centro_x=0.5, legenda_ass=None, fps=30, crf=21, primeiro_seg=None):
+               centro_x=0.5, legenda_ass=None, fps=30, crf=21, primeiro_seg=None, encoder="auto"):
     grafo = grafo_layout(layout, facecam, centro_x)
     if legenda_ass:
         grafo = grafo.replace("[v]", "[v0]") + f";[v0]subtitles={os.path.basename(legenda_ass)}[v]"
@@ -121,8 +182,16 @@ def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", fa
     if primeiro_seg is None or tem_audio(ffprobe, primeiro_seg):
         cmd += ["-map", "0:a:0?", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
                 "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
-    cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-maxrate", "8M",
-            "-bufsize", "16M", "-pix_fmt", "yuv420p", "-r", str(fps), "-movflags", "+faststart",
-            "final.mp4"]
-    _rodar(cmd, cwd=pasta)  # cwd = pasta do clipe, assim a legenda não precisa de caminho com escape
+    enc = encoder_video(ffmpeg, encoder)
+    fim = ["-pix_fmt", "yuv420p", "-r", str(fps), "-movflags", "+faststart", "final.mp4"]
+    try:
+        # cwd = pasta do clipe, assim a legenda não precisa de caminho com escape
+        _rodar(cmd + _args_encoder(enc, crf) + fim, cwd=pasta)
+    except RuntimeError as e:
+        if enc == "libx264":
+            raise
+        # a placa falhou no meio (driver, limite de sessões...): refaz no processador e não insiste mais
+        log.warning("A placa de vídeo falhou (%s). Passando a montar no processador.", str(e)[-200:])
+        _desistir_da_placa(encoder)
+        _rodar(cmd + _args_encoder("libx264", crf) + fim, cwd=pasta)
     return os.path.join(pasta, "final.mp4")

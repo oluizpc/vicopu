@@ -119,8 +119,13 @@ O log mostra cada disparo com o motivo, por exemplo `chat 48 msgs/10s (normal 9.
 
 - **Capturar** é leve: não recodifica, só copia os pedaços. Dá pra vigiar dezenas de lives.
 - **Cortar** é o que pesa: cada clipe de 45 s leva uns 10 a 30 s de CPU com o preset `veryfast`. `workers_corte` controla quantos cortes rodam ao mesmo tempo.
-- **Whisper `small`** na CPU leva uns 5 a 15 s por clipe. Com GPU NVIDIA, cai pra 1 a 2 s.
+- **Whisper `small`** na CPU leva uns 5 a 15 s por clipe. Com GPU NVIDIA, cai pra 1 a 2 s (veja 6.1).
 - Uma referência, que é estimativa e precisa ser confirmada no teste: uma VPS de 8 vCPU e 16 GB aguenta umas 10 lives com cortes frequentes. Com mais lives, adicione GPU ou mais máquinas, separando os canais em configs diferentes.
+
+## 6.1 Placa de vídeo
+
+- **Montagem dos clipes:** o VICOPU testa sozinho, na largada, e usa a placa que tiver: **NVIDIA (NVENC)**, **AMD (AMF)** ou **Intel (QuickSync)**. Se nenhuma funcionar, usa o processador. O log mostra a escolha (`Montagem dos vídeos: usando ...`). Pra forçar: `corte.encoder: amd` (ou `nvidia`, `intel`, `cpu`). Se a placa falhar no meio, ele refaz no processador sozinho.
+- **Legenda (Whisper):** só acelera com **NVIDIA**. Nesse caso, rode `pip install -r requirements-nvidia.txt` (≈1,2 GB). Com **AMD** ou sem placa, ela roda no processador. Se ficar lenta com muitas lives, use `corte.modelo_whisper: base` (mais rápido, um pouco menos preciso).
 
 ## 7. Estrutura
 

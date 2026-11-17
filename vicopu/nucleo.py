@@ -205,7 +205,7 @@ class Fabrica:
                                           corte.altura_legenda(layout))
             corte.renderizar(ff, self.ffprobe, lista, ini + a, b - a, pasta, layout,
                              facecam, canal.get("centro_x", 0.5), ass, c["fps"], c["crf"],
-                             primeiro_seg=segs[0].caminho)
+                             primeiro_seg=segs[0].caminho, encoder=c.get("encoder", "auto"))
         finally:
             vigia.buffer.soltar(segs)
 

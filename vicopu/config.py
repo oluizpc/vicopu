@@ -42,7 +42,8 @@ PADROES = {
         "layout_padrao": "auto",  # auto | split | blur | centro
         "legenda": True,
         "modelo_whisper": "small",
-        "whisper_dispositivo": "auto",  # auto | cpu | cuda
+        "whisper_dispositivo": "auto",  # auto | cpu | cuda (só NVIDIA)
+        "encoder": "auto",  # auto | nvidia | amd | intel | cpu  (placa de vídeo pra montar os clipes)
         "idioma": "pt",
         "crf": 21,
     },

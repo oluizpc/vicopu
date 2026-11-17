@@ -30,6 +30,8 @@ def rodar(cfg):
         sys.exit("ffmpeg não encontrado. Instale e deixe no PATH (ou ajuste geral.ffmpeg no config).")
     if not cfg["canais"]:
         sys.exit("Nenhum canal no config. Adicione em 'canais:'.")
+    from . import corte
+    corte.encoder_video(cfg["geral"]["ffmpeg"], cfg["corte"].get("encoder", "auto"))  # descobre a placa já na largada
     fabrica = Fabrica(cfg)
     vigias = [Vigia(c, cfg, fabrica) for c in cfg["canais"]]
     for v in vigias:

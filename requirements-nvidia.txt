@@ -1,0 +1,5 @@
+# OPCIONAL, só pra máquinas com placa NVIDIA: deixa a LEGENDA (Whisper) rodar na placa.
+# São ~1,2 GB. Em placa AMD ou sem placa, NÃO instale (a legenda roda no processador).
+#   pip install -r requirements-nvidia.txt
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*

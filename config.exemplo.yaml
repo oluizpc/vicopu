@@ -30,6 +30,7 @@ corte:
   layout_padrao: auto            # auto (acha a cam sozinho) | split | blur | centro
   legenda: true
   modelo_whisper: small          # tiny/base (rápido) · small (equilíbrio) · medium (melhor, pesado)
+  encoder: auto                  # placa pra montar os clipes: auto | amd | nvidia | intel | cpu
   idioma: pt
 
 ia:
