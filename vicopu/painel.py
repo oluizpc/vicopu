@@ -228,9 +228,9 @@ ${previa(c)}
 <details><summary>Por que esse clipe?</summary><p>${esc(c.motivo)}</p>${c.motivo_ia&&c.motivo_ia!=="sem IA"?`<p><b>IA:</b> ${esc(c.motivo_ia)}</p>`:""}</details>
 </div></div>`}
 function clipesF(){return estado.clipes.filter(c=>!filtroCanal||c.canal===filtroCanal)}
-function filtrar(v){filtroCanal=v;localStorage.setItem("vicopu_canal",v);sel.clear();$("#grade")._ass=null;render()}
+function filtrar(v){if(document.activeElement)document.activeElement.blur();filtroCanal=v;localStorage.setItem("vicopu_canal",v);sel.clear();$("#grade")._ass=null;render()}
 function renderClipes(){const contagem=Object.fromEntries(ABAS.map(([k,,f])=>[k,clipesF().filter(c=>f(c.status||"")).length]));
-if(!$("#abas").contains(document.activeElement))$("#abas").innerHTML=ABAS.map(([k,nome])=>`<button class="aba ${k===aba?"ativa":""}" onclick="trocar('${k}')">${nome}<span class="n">${contagem[k]}</span></button>`).join("")+
+if(!($("#abas").contains(document.activeElement)&&document.activeElement.tagName==="SELECT"))$("#abas").innerHTML=ABAS.map(([k,nome])=>`<button class="aba ${k===aba?"ativa":""}" onclick="trocar('${k}')">${nome}<span class="n">${contagem[k]}</span></button>`).join("")+
 `<span class="filtro"><select onchange="filtrar(this.value)"><option value="">todas as lives</option>${[...new Set(estado.clipes.map(c=>c.canal))].sort().map(n=>`<option ${n===filtroCanal?"selected":""} value="${esc(n)}">${esc(n)}</option>`).join("")}</select></span>`+
 (aba==="publicados"&&contagem.publicados?(()=>{const pub=clipesF().filter(c=>c.status==="publicado"&&c.numeros);const t=pub.reduce((a,c)=>a+c.numeros.views,0);
 return`<span class="cresce"></span>${pub.length?`<span style="color:var(--sub);font-size:13px">👁 <b style="color:var(--txt)">${fmt(t)}</b> views no total</span>`:""}<button class="btn" onclick="atualizarNumeros()">🔄 Atualizar números</button>`})():"")+
@@ -254,7 +254,7 @@ $("#resumo").innerHTML=`<span><b>${ao}</b>/${estado.lives.length} ao vivo</span>
 document.title=(p?`(${p}) `:"")+"VICOPU";const ids=new Set(estado.clipes.map(c=>c.id));
 [...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});avisarNovos();pintarSino();if(!$("#lives").contains(document.activeElement))renderLives();renderParadas();renderClipes();pintarSel()}
 async function atualizar(){try{estado=await (await fetch("/api/estado")).json();render()}catch(e){}}
-function trocar(k){aba=k;sel.clear();localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
+function trocar(k){if(document.activeElement)document.activeElement.blur();aba=k;sel.clear();localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
 async function cortar(n){const b=event&&event.target;if(b){b.disabled=true;b.textContent="✂ Pedido!"}
 try{await post("/cortar/"+encodeURIComponent(n));toast("✂ Corte pedido em "+n+". Sai em ~1 min (no notebook pode levar mais).")}catch(e){}
 setTimeout(atualizar,1500)}

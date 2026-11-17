@@ -171,6 +171,49 @@ class Fabrica:
         self.trava = threading.Lock()
         self.log = logging.getLogger("fabrica")
         self.ffprobe = shutil.which("ffprobe") or "ffprobe"
+        self._consertar_interrompidos()
+
+    def _video_ok(self, caminho):
+        """O arquivo existe e não ficou pela metade (montagem interrompida deixa um mp4 quebrado)."""
+        if not os.path.exists(caminho):
+            return False
+        try:
+            import subprocess
+            r = subprocess.run([self.ffprobe, "-v", "error", "-show_entries", "format=duration",
+                                "-of", "csv=p=0", caminho], capture_output=True, text=True, timeout=20)
+            return r.returncode == 0 and float(r.stdout.strip() or 0) > 1
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _consertar_interrompidos(self):
+        """Clipes que ficaram 'Montando…'/'Publicando…' porque o VICOPU foi fechado no meio."""
+        modo = self.cfg["publicacao"]["modo"]
+        for m in self.listar():
+            st = m.get("status")
+            if st not in ("renderizando", "publicando"):
+                continue
+            tem_video = self._video_ok(m.get("video", "") or "")
+            if st == "publicando":
+                m["status"] = "erro"
+                m.setdefault("resultados", {})["aviso"] = ("o VICOPU foi fechado durante a publicação: "
+                                                           "confira no YouTube/TikTok antes de publicar de novo")
+            elif not tem_video:
+                try:  # mp4 pela metade: tira pra não aparecer um vídeo quebrado com botão Publicar
+                    os.remove(m.get("video", "") or "")
+                except OSError:
+                    pass
+                m["status"] = "erro"
+                m["motivo_ia"] = (m.get("motivo_ia") or "") + " [montagem interrompida: o VICOPU foi fechado]"
+            elif m.get("descartado_pela_ia"):
+                m["status"] = "descartado_ia"
+            else:
+                m["status"] = "pendente" if modo == "revisao" else "pronto"
+            try:
+                self.salvar(m)
+                self.log.info("Clipe %s tinha ficado em '%s' (VICOPU fechado no meio): agora '%s'.",
+                              m["id"], st, m["status"])
+            except OSError:
+                pass
 
     # ---------- registro dos clipes (um meta.json por pasta) ----------
     def listar(self):
