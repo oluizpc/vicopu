@@ -123,6 +123,24 @@ class Vigia:
                 self.log.info("Layout automático: blur (sem cam achada; tento de novo em 2 min)")
                 self.captura.parar_evt.wait(120)
 
+    def mudar_sensibilidade(self, nivel):
+        nivel = str(nivel).lower()
+        if nivel not in SENSIBILIDADES:
+            raise ValueError("sensibilidade inválida (alta, normal ou baixa)")
+        self.canal["sensibilidade"] = nivel
+        self.detector.c.update(deteccao_do_canal(self.cfg, self.canal))
+        self.log.info("Sensibilidade agora: %s", nivel)
+
+    def termometro(self):
+        try:
+            e = self.detector.estado()
+        except Exception:  # noqa: BLE001
+            return None
+        aquecendo = time.time() - self.detector.inicio < self.detector.c["aquecimento_segundos"]
+        return {"msgs": e["n"], "normal": round(e["base"] or 0, 1), "score": round(e["score"], 2),
+                "limiar": self.detector.c["limiar_score"], "aquecendo": aquecendo,
+                "janela": self.detector.c["janela_segundos"]}
+
     def parar(self):
         self.captura.parar()
         if self.chat:
@@ -208,6 +226,10 @@ class Fabrica:
             dur = min(t1, segs[-1].fim) - max(t0, segs[0].inicio)
             ff = cfg["geral"]["ffmpeg"]
             self.log.info("Cortando %s (%.0f s de vídeo)...", cid, dur)
+            try:  # trecho bruto guardado pra poder ajustar o corte depois no painel
+                corte.guardar_fonte(ff, lista, pasta)
+            except Exception as e:  # noqa: BLE001
+                self.log.warning("Não guardei o trecho bruto de %s (ajuste do corte indisponível): %s", cid, e)
 
             palavras = []
             if c["legenda"] or cfg["ia"]["usar_claude"]:
@@ -215,7 +237,13 @@ class Fabrica:
                 palavras = ia.transcrever(wav, c["modelo_whisper"], canal.get("idioma", c["idioma"]), c.get("whisper_dispositivo", "auto"))
             decisao = ia.julgar(cfg, canal, palavras, m.amostra_chat, dur)
 
+            try:
+                with open(os.path.join(pasta, "palavras.json"), "w", encoding="utf-8") as f:
+                    json.dump(palavras, f)
+            except (OSError, TypeError):
+                pass
             meta = {"id": cid, "canal": canal["nome"], "criado": m.instante, "score": m.score,
+                    "fonte_ini": ini, "janela": round(dur, 2),
                     "motivo": m.motivo, "manual": m.manual, "titulo": decisao["titulo"],
                     "descricao": decisao["descricao"], "hashtags": decisao.get("hashtags", []),
                     "hashtags_fixas": canal.get("hashtags", []), "nota_ia": decisao.get("nota"),
@@ -244,6 +272,8 @@ class Fabrica:
             corte.renderizar(ff, self.ffprobe, lista, ini + a, b - a, pasta, layout,
                              facecam, canal.get("centro_x", 0.5), ass, c["fps"], c["crf"],
                              primeiro_seg=segs[0].caminho, encoder=c.get("encoder", "auto"))
+            meta.update({"corte": [round(a, 2), round(b, 2)], "layout": layout, "facecam": facecam,
+                         "legenda": bool(ass), "centro_x": canal.get("centro_x", 0.5), "versao": 1})
         finally:
             vigia.buffer.soltar(segs)
 
@@ -261,6 +291,72 @@ class Fabrica:
             meta["status"] = "pendente" if modo == "revisao" else "pronto"
             self.salvar(meta)
             self.log.info("Clipe pronto (%s): %s | %s", meta["status"], cid, meta["titulo"])
+
+    def remontar(self, cid, inicio, fim, layout, legenda, cam_do_canal=None):
+        """Ajusta o corte (início/fim dentro da janela gravada), o layout e a legenda, e monta de novo."""
+        meta = self.ler(cid)
+        if meta.get("status") in ("renderizando", "publicando"):
+            raise RuntimeError("esse clipe ainda está sendo montado ou publicado; espere terminar")
+        if meta.get("status") not in EDITAVEIS:
+            raise RuntimeError("esse clipe não pode mais ser editado")
+        pasta = os.path.join(self.pasta, os.path.basename(cid))
+        if not os.path.exists(os.path.join(pasta, "fonte.ts")):
+            raise RuntimeError("esse clipe não tem o trecho bruto guardado (é de antes dessa função)")
+        janela = float(meta.get("janela") or 0)
+        inicio, fim = max(0.0, float(inicio)), min(janela, float(fim))
+        if fim - inicio < 3:
+            raise ValueError("o corte precisa ter pelo menos 3 segundos")
+        if fim - inicio > self.cfg["corte"]["duracao_maxima"] + 0.5:
+            raise ValueError(f"o corte passa de {self.cfg['corte']['duracao_maxima']} s")
+        if layout not in ("split", "blur", "centro"):
+            raise ValueError("layout inválido")
+        facecam = meta.get("facecam")
+        if layout == "split" and not facecam:
+            facecam = cam_do_canal
+            if not facecam:
+                raise ValueError("não tenho a posição da cam desse canal pra montar em split")
+        anterior = meta["status"]
+        meta["status"] = "renderizando"
+        self.salvar(meta)
+        self.pool.submit(self._remontar, meta, anterior, inicio, fim, layout, facecam, bool(legenda))
+
+    def _remontar(self, meta, anterior, a, b, layout, facecam, legenda):
+        c = self.cfg["corte"]
+        pasta = os.path.join(self.pasta, meta["id"])
+        try:
+            ass = None
+            if legenda:
+                try:
+                    with open(os.path.join(pasta, "palavras.json"), encoding="utf-8") as f:
+                        palavras = json.load(f)
+                except (OSError, ValueError):
+                    palavras = []
+                pal = [(p0 - a, p1 - a, w) for p0, p1, w in palavras if p0 >= a and p1 <= b]
+                if pal:
+                    ass = corte.gerar_ass(pal, os.path.join(pasta, "legenda.ass"), corte.altura_legenda(layout))
+            corte.renderizar(self.cfg["geral"]["ffmpeg"], self.ffprobe, os.path.join(pasta, "lista_fonte.txt"),
+                             float(meta.get("fonte_ini", 0)) + a, b - a, pasta, layout, facecam,
+                             meta.get("centro_x", 0.5), ass, c["fps"], c["crf"],
+                             primeiro_seg=os.path.join(pasta, "fonte.ts"), encoder=c.get("encoder", "auto"),
+                             saida="novo.mp4")
+            for tentativa in range(10):  # no Windows o vídeo pode estar aberto no navegador por um instante
+                try:
+                    os.replace(os.path.join(pasta, "novo.mp4"), os.path.join(pasta, "final.mp4"))
+                    break
+                except PermissionError:
+                    time.sleep(0.5)
+            else:
+                raise RuntimeError("não consegui trocar o vídeo (arquivo em uso)")
+            meta.update({"corte": [round(a, 2), round(b, 2)], "layout": layout, "facecam": facecam,
+                         "legenda": bool(ass), "duracao": round(b - a, 1),
+                         "versao": int(meta.get("versao") or 1) + 1})
+            self.log.info("Clipe remontado: %s (%.1f–%.1f s, %s%s)", meta["id"], a, b, layout,
+                          ", com legenda" if ass else "")
+        except Exception as e:  # noqa: BLE001
+            self.log.exception("Falha ao remontar %s: %s", meta["id"], e)
+        finally:
+            meta["status"] = anterior
+            self.salvar(meta)
 
     def publicar(self, meta, titulo=None):
         if titulo:
@@ -411,6 +507,14 @@ class Central:
         self._salvar_do_painel()
         self.log.info("Live adicionada pelo painel: %s (%s %s)", nome, canal["plataforma"], canal["canal"])
         return nome
+
+    def mudar_sensibilidade(self, nome, nivel):
+        v = self.por_nome(nome)
+        if not v:
+            raise ValueError("live não encontrada")
+        v.mudar_sensibilidade(nivel)
+        if v.canal.get("do_painel"):
+            self._salvar_do_painel()
 
     def remover(self, nome):
         with self.trava:

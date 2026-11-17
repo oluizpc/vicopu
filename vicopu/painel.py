@@ -38,6 +38,11 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);m
 .nova input,.nova select{background:var(--card2);color:var(--txt);border:1px solid var(--borda);border-radius:9px;padding:8px 10px;font:inherit;min-width:0}
 .nova .dica{color:var(--sub);font-size:12px;margin-top:8px}
 .live .acoes2{display:flex;gap:8px;align-items:center}
+.termo{height:6px;background:var(--card2);border-radius:4px;overflow:hidden}.termo i{display:block;height:100%;background:var(--azul);transition:width .5s}
+.termo.quente i{background:var(--amarelo)}.termo.pico i{background:var(--vermelho)}
+.live select,.filtro select,.ajuste input,.ajuste select{background:var(--card2);color:var(--txt);border:1px solid var(--borda);border-radius:8px;padding:5px 8px;font:inherit;font-size:12px}
+.ajuste{margin-top:8px;font-size:12px;color:var(--sub)}.ajuste .lin{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.ajuste input[type=number]{width:72px}.sino.on{background:var(--roxo);color:#fff}
 .live .info{color:var(--sub);font-size:12px}
 .btn{border:0;border-radius:9px;padding:8px 12px;font-weight:650;font-size:13px;cursor:pointer;color:var(--txt);background:var(--card2);
 display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
@@ -90,7 +95,7 @@ border:1px solid var(--roxo);border-radius:12px;padding:8px 10px;margin-bottom:1
 main{padding:14px}.lives,.grade{grid-template-columns:1fr}}
 </style></head><body>
 <header><div class="logo">VI<span>CO</span>PU</div><div class="modo" id="modo"></div><div class="cresce"></div>
-<div class="resumo" id="resumo"></div></header>
+<div class="resumo" id="resumo"></div><button class="btn sino" id="sino" onclick="alternarAvisos()" title="Som e notificação quando cair clipe novo">🔔 Avisos</button></header>
 <main>
 <h2>Lives</h2>
 <details id="nova" class="nova"><summary>➕ Adicionar live (sem parar as outras)</summary>
@@ -118,6 +123,17 @@ const ABAS=[["pendentes","Aguardando você",s=>["pendente","pronto","erro"].incl
 ["andamento","Em andamento",s=>["renderizando","publicando"].includes(s)],
 ["publicados","Publicados",s=>s==="publicado"],["descartados","Descartados",s=>s.startsWith("descartado")],["todos","Todos",s=>true]];
 let aba=localStorage.getItem("vicopu_aba")||"pendentes", estado=null, sel=new Set(), ultimoSel=null;
+let filtroCanal=localStorage.getItem("vicopu_canal")||"", avisos=localStorage.getItem("vicopu_avisos")==="1", conhecidos=null;
+function bip(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();[0,0.18].forEach((t,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();
+o.frequency.value=i?1046:784;g.gain.setValueAtTime(0.0001,ctx.currentTime+t);g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+t+0.02);
+g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+t+0.16);o.connect(g).connect(ctx.destination);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+0.2)})}catch(e){}}
+function pintarSino(){$("#sino").classList.toggle("on",avisos);$("#sino").textContent=avisos?"🔔 Avisos ligados":"🔕 Avisos"}
+async function alternarAvisos(){avisos=!avisos;localStorage.setItem("vicopu_avisos",avisos?"1":"0");
+if(avisos){if("Notification" in window&&Notification.permission==="default"){try{await Notification.requestPermission()}catch(e){}}bip();toast("🔔 Vai tocar um som quando cair clipe novo")}pintarSino()}
+function avisarNovos(){const pend=estado.clipes.filter(c=>["pendente","pronto"].includes(c.status));const ids=new Set(pend.map(c=>c.id));
+if(conhecidos===null){conhecidos=ids;return}const novos=pend.filter(c=>!conhecidos.has(c.id));conhecidos=ids;if(!novos.length||!avisos)return;
+bip();toast(`🎬 ${novos.length} clipe(s) novo(s) pra revisar`);
+if("Notification" in window&&Notification.permission==="granted"&&document.hidden){novos.slice(0,3).forEach(c=>{try{const n=new Notification("VICOPU: clipe de "+c.canal,{body:c.titulo||"",tag:c.id});n.onclick=()=>{window.focus();n.close()}}catch(e){}})}}
 const $=s=>document.querySelector(s), esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),2200)}
 async function post(url,corpo){const r=await fetch(url,{method:"POST",body:corpo||""});const t=await r.text();if(!r.ok){toast("⚠ "+t);throw t}return t}
@@ -138,18 +154,42 @@ function renderLives(){$("#lives").innerHTML=estado.lives.map(l=>{const n=estado
 return`<div class="live"><div class="nome"><span class="dot ${l.no_ar?"on":""}"></span>${esc(l.nome)}
 <span class="plat ${esc(l.plataforma)}">${esc(l.plataforma)}</span></div>
 <div class="info">${l.no_ar?"Ao vivo":"Offline / conectando"} · layout ${l.automatico?`<a href="/camauto/${encodeURIComponent(l.nome)}" target="_blank">${esc(l.layout)} (auto)</a>`:esc(l.layout)}
- · sensibilidade ${esc(l.sensibilidade)} · ${n} clipe${n==1?"":"s"}</div>
+ · ${n} clipe${n==1?"":"s"}</div>
+${termo(l)}
+<div class="info">sensibilidade <select onchange="mudarSens('${esc(l.nome)}',this.value)">${["alta","normal","baixa"].map(o=>`<option ${o===l.sensibilidade?"selected":""}>${o}</option>`).join("")}</select></div>
 <div class="acoes2"><button class="btn roxo" ${l.no_ar?"":"disabled"} onclick="cortar('${esc(l.nome)}')">✂ Cortar agora</button>
 <button class="btn fant perigo" title="Parar de vigiar esta live" onclick="pararLive('${esc(l.nome)}',${l.do_painel})">⏹ Parar</button></div></div>`}).join("")||
 `<div class="vazia">Nenhuma live: adicione uma acima.</div>`}
+function termo(l){const t=l.termometro;if(!t)return"";if(t.aquecendo)return`<div class="info">🌡 aprendendo o ritmo do chat… (${t.msgs} msgs/${t.janela}s)</div>`;
+const pct=Math.min(100,Math.round(100*t.score/t.limiar)),cls=pct>=100?"pico":pct>=70?"quente":"";
+return`<div class="termo ${cls}" title="quão perto de virar corte"><i style="width:${pct}%"></i></div><div class="info">🌡 chat ${t.msgs} msgs/${t.janela}s (normal ${t.normal}) · ${pct}% do ponto de corte</div>`}
+async function mudarSens(n,v){await post("/sensibilidade/"+encodeURIComponent(n),v);toast(`Sensibilidade de ${n}: ${v}`);document.activeElement.blur();atualizar()}
 async function addLive(){const link=$("#n_link").value.trim();if(!link){toast("Cole o link da live");return}
 const nome=await post("/live/adicionar",JSON.stringify({link,apelido:$("#n_apelido").value,sensibilidade:$("#n_sens").value,idioma:$("#n_idioma").value}));
 $("#n_link").value="";$("#n_apelido").value="";toast("👀 Vigiando "+nome+". A cam é achada em ~1 min.");atualizar()}
 async function pararLive(n,doPainel){if(!confirm(doPainel?`Parar de vigiar ${n} e tirar da lista?`:`Parar de vigiar ${n}? (está no config.yaml: volta quando reiniciar o VICOPU)`))return;
 await post("/parar/"+encodeURIComponent(n));toast("⏹ "+n+" parada");atualizar()}
+function ajuste(c){const [a,b]=c.corte,j=c.janela||b;
+return`<details class="ajuste" id="aj_${c.id}"><summary>✂ Ajustar o corte</summary>
+<div>O trecho gravado tem ${j.toFixed(0)} s. Hoje o clipe vai de ${a.toFixed(1)} s a ${b.toFixed(1)} s dele.</div>
+<div class="lin">início <input type="number" id="ai_${c.id}" step="0.5" min="0" max="${j}" value="${a.toFixed(1)}">
+fim <input type="number" id="af_${c.id}" step="0.5" min="0" max="${j}" value="${b.toFixed(1)}"></div>
+<div class="lin"><button class="btn" onclick="marcar('${c.id}','ai')">⏮ início = ponto do vídeo</button><button class="btn" onclick="marcar('${c.id}','af')">fim = ponto do vídeo ⏭</button>
+<button class="btn" onclick="mais('${c.id}',-5)">+5 s antes</button><button class="btn" onclick="mais('${c.id}',5)">+5 s depois</button></div>
+<div class="lin">layout <select id="al_${c.id}">${["split","blur","centro"].map(o=>`<option ${o===c.layout?"selected":""}>${o}</option>`).join("")}</select>
+<label><input type="checkbox" id="ag_${c.id}" ${c.legenda!==false?"checked":""}> legenda</label>
+<button class="btn roxo" onclick="remontar('${c.id}')">Montar de novo</button></div></details>`}
+function marcar(id,campo){const c=estado.clipes.find(x=>x.id===id),v=document.querySelector(`[data-id="${id}"] video`);if(!c||!v)return;
+$("#"+campo+"_"+id).value=(c.corte[0]+v.currentTime).toFixed(1);toast("Marcado em "+(c.corte[0]+v.currentTime).toFixed(1)+" s")}
+function mais(id,d){const c=estado.clipes.find(x=>x.id===id),j=c.janela;if(d<0){const e=$("#ai_"+id);e.value=Math.max(0,+e.value+d).toFixed(1)}
+else{const e=$("#af_"+id);e.value=Math.min(j,+e.value+d).toFixed(1)}}
+async function remontar(id){const ini=+$("#ai_"+id).value,fim=+$("#af_"+id).value;
+if(!(fim>ini)){toast("O fim precisa vir depois do início");return}
+await post("/remontar/"+id,JSON.stringify({inicio:ini,fim:fim,layout:$("#al_"+id).value,legenda:$("#ag_"+id).checked}));
+toast("🎬 Montando de novo… (uns segundos)");document.activeElement.blur();$("#grade")._ass=null;atualizar()}
 function card(c){const st=c.status||"";const descartado=st.startsWith("descartado");
 const podeEditar=["pendente","pronto","erro"].includes(st)||descartado;
-const video=c.tem_video?`<video controls preload="metadata" src="/video/${c.id}"></video>`:
+const video=c.tem_video?`<video controls preload="metadata" src="/video/${c.id}?v=${c.versao||0}"></video>`:
 `<div class="vazio">${st==="renderizando"?"Montando o clipe…":"Sem vídeo (não foi montado)"}</div>`;
 return`<div class="clip ${st==="pendente"?"destaque":""} ${sel.has(c.id)?"sel":""}" data-id="${c.id}">
 <div class="midia">${video}<div class="marca" title="Selecionar" onclick="alternar('${c.id}',event)">✓</div><div class="selo">${c.duracao?`<span>${Math.round(c.duracao)}s</span>`:""}${c.nota_ia!=null&&c.motivo_ia!=="sem IA"?`<span>${nota(c.nota_ia)}</span>`:""}</div></div>
@@ -166,28 +206,34 @@ ${["renderizando","publicando"].includes(st)?"":`<button class="btn fant perigo"
 ${podeEditar&&c.tem_video&&!(c.destinos&&c.destinos.length)?`<div class="res">⚠ Sem destino pra publicar: coloque <b>publicar_em</b> no canal <b>${esc(c.canal)}</b> no config.yaml e reinicie. Ou use Baixar/Copiar e poste na mão.</div>`:""}
 ${c.destinos&&c.destinos.length&&podeEditar?`<div class="res">Vai pra: ${esc(c.destinos.join(", "))}</div>`:""}
 ${c.resultados&&Object.keys(c.resultados).length?`<div class="res">${resultados(c.resultados)}</div>`:""}
+${podeEditar&&c.pode_ajustar&&c.corte?ajuste(c):""}
 ${previa(c)}
 <details><summary>Por que esse clipe?</summary><p>${esc(c.motivo)}</p>${c.motivo_ia&&c.motivo_ia!=="sem IA"?`<p><b>IA:</b> ${esc(c.motivo_ia)}</p>`:""}</details>
 </div></div>`}
-function renderClipes(){const contagem=Object.fromEntries(ABAS.map(([k,,f])=>[k,estado.clipes.filter(c=>f(c.status||"")).length]));
-$("#abas").innerHTML=ABAS.map(([k,nome])=>`<button class="aba ${k===aba?"ativa":""}" onclick="trocar('${k}')">${nome}<span class="n">${contagem[k]}</span></button>`).join("")+
+function clipesF(){return estado.clipes.filter(c=>!filtroCanal||c.canal===filtroCanal)}
+function filtrar(v){filtroCanal=v;localStorage.setItem("vicopu_canal",v);sel.clear();$("#grade")._ass=null;render()}
+function renderClipes(){const contagem=Object.fromEntries(ABAS.map(([k,,f])=>[k,clipesF().filter(c=>f(c.status||"")).length]));
+if(!$("#abas").contains(document.activeElement))$("#abas").innerHTML=ABAS.map(([k,nome])=>`<button class="aba ${k===aba?"ativa":""}" onclick="trocar('${k}')">${nome}<span class="n">${contagem[k]}</span></button>`).join("")+
+`<span class="filtro"><select onchange="filtrar(this.value)"><option value="">todas as lives</option>${[...new Set(estado.clipes.map(c=>c.canal))].sort().map(n=>`<option ${n===filtroCanal?"selected":""} value="${esc(n)}">${esc(n)}</option>`).join("")}</select></span>`+
 (contagem.descartados?`<span class="cresce"></span><button class="btn fant perigo" onclick="limpar()">🗑 Limpar descartados</button>`:"");
-const f=ABAS.find(a=>a[0]===aba)[2];const lista=estado.clipes.filter(c=>f(c.status||""));
+const f=ABAS.find(a=>a[0]===aba)[2];const lista=clipesF().filter(c=>f(c.status||""));
 const grade=$("#grade");const foco=document.activeElement;
+const abertos=[...grade.querySelectorAll("details[open]")].map(d=>d.id).filter(x=>x);
+const reabrir=()=>abertos.forEach(i=>{const d=document.getElementById(i);if(d)d.open=true});
 // não refaz cards cujo título está sendo editado nem os vídeos tocando
 const vivos=new Set([...grade.querySelectorAll(".clip")].filter(el=>el.contains(foco)||[...el.querySelectorAll("video")].some(v=>!v.paused)).map(el=>el.dataset.id));
-const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+(c.descricao||"")+(c.credito||"")+JSON.stringify(c.resultados||{})).join("|")+aba;
+const assinatura=lista.map(c=>c.id+c.status+(c.titulo||"")+(c.descricao||"")+(c.credito||"")+JSON.stringify(c.resultados||{})+(c.versao||"")).join("|")+aba+filtroCanal;
 if(grade._ass===assinatura)return;
 if(vivos.size&&lista.every(c=>grade.querySelector(`[data-id="${c.id}"]`))){
-lista.forEach(c=>{if(!vivos.has(c.id)){const el=grade.querySelector(`[data-id="${c.id}"]`);el.outerHTML=card(c)}});grade._ass=assinatura;return}
+lista.forEach(c=>{if(!vivos.has(c.id)){const el=grade.querySelector(`[data-id="${c.id}"]`);el.outerHTML=card(c)}});grade._ass=assinatura;reabrir();return}
 grade.innerHTML=lista.length?lista.map(card).join(""):`<div class="vazia">Nada por aqui${aba==="pendentes"?" — quando sair um clipe, ele aparece aqui pra você aprovar.":"."}</div>`;
-grade._ass=assinatura}
+grade._ass=assinatura;reabrir()}
 function render(){$("#modo").innerHTML=`modo <b>${esc(estado.modo)}</b>`;
 const p=estado.clipes.filter(c=>["pendente","pronto","erro"].includes(c.status)).length,
 pub=estado.clipes.filter(c=>c.status==="publicado").length,ao=estado.lives.filter(l=>l.no_ar).length;
 $("#resumo").innerHTML=`<span><b>${ao}</b>/${estado.lives.length} ao vivo</span><span><b>${p}</b> aguardando</span><span><b>${pub}</b> publicados</span>`;
 document.title=(p?`(${p}) `:"")+"VICOPU";const ids=new Set(estado.clipes.map(c=>c.id));
-[...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});renderLives();renderClipes();pintarSel()}
+[...sel].forEach(id=>{if(!ids.has(id))sel.delete(id)});avisarNovos();pintarSino();if(!$("#lives").contains(document.activeElement))renderLives();renderClipes();pintarSel()}
 async function atualizar(){try{estado=await (await fetch("/api/estado")).json();render()}catch(e){}}
 function trocar(k){aba=k;sel.clear();localStorage.setItem("vicopu_aba",k);$("#grade")._ass=null;render()}
 async function cortar(n){await post("/cortar/"+encodeURIComponent(n));toast("✂ Corte pedido em "+n+". Sai em ~1 min.");setTimeout(atualizar,1500)}
@@ -200,7 +246,7 @@ async function copiar(id){const c=estado.clipes.find(x=>x.id===id);
 const txt=[$("#t_"+id).value.trim(),c.descricao||"",c.credito||"",tagsDe(c).join(" ")].filter(x=>x).join("\n\n");
 try{await navigator.clipboard.writeText(txt)}catch(e){const a=document.createElement("textarea");a.value=txt;document.body.appendChild(a);a.select();document.execCommand("copy");a.remove()}
 toast("📋 Título, descrição, crédito e hashtags copiados")}
-function listaAba(){const f=ABAS.find(a=>a[0]===aba)[2];return estado.clipes.filter(c=>f(c.status||""))}
+function listaAba(){const f=ABAS.find(a=>a[0]===aba)[2];return clipesF().filter(c=>f(c.status||""))}
 function pintarSel(){document.querySelectorAll(".clip").forEach(el=>el.classList.toggle("sel",sel.has(el.dataset.id)));
 const n=sel.size;$("#lote").classList.toggle("on",n>0);$("#lote_qtd").textContent=n+" selecionado"+(n==1?"":"s")}
 function alternar(id,ev){ev.stopPropagation();
@@ -230,11 +276,13 @@ def iniciar(fabrica, central, host, porta):
     def estado():
         lives = [{"nome": v.canal["nome"], "plataforma": v.canal["plataforma"], "no_ar": v.no_ar(),
                   "layout": v.layout_atual, "automatico": v.automatico, "do_painel": bool(v.canal.get("do_painel")),
+                  "termometro": v.termometro() if v.no_ar() else None,
                   "sensibilidade": v.canal.get("sensibilidade", "normal")} for v in central.lista()]
         clipes = []
         for m in fabrica.listar()[:200]:
             m = dict(m)
             m["tem_video"] = os.path.exists(m.get("video", "") or "")
+            m["pode_ajustar"] = os.path.exists(os.path.join(fabrica.pasta, m["id"], "fonte.ts"))
             m["destinos"] = fabrica.destinos_atuais(m)
             canal = next((c for c in fabrica.cfg["canais"] if c["nome"] == m.get("canal")), None)
             m["credito"] = cfg_credito(fabrica.cfg, canal)
@@ -256,7 +304,10 @@ def iniciar(fabrica, central, host, porta):
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
-            self.wfile.write(dados)
+            try:
+                self.wfile.write(dados)
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                pass  # o navegador cancelou (normal com vídeo: ele pede pedaços e desiste de alguns)
 
         def do_GET(self):
             caminho = urllib.parse.urlparse(self.path).path
@@ -299,6 +350,22 @@ def iniciar(fabrica, central, host, porta):
                     return self._enviar(200, nome, "text/plain; charset=utf-8")
                 elif acao == "parar":
                     central.remover(alvo)
+                elif acao == "sensibilidade":
+                    central.mudar_sensibilidade(alvo, corpo.strip())
+                elif acao == "remontar":
+                    d = json.loads(corpo or "{}")
+                    meta = fabrica.ler(_seguro(alvo))
+                    vig = central.por_nome(meta.get("canal", ""))
+                    cam = vig.facecam_atual if vig else None
+                    if not cam:
+                        arq = os.path.join(fabrica.cfg["geral"]["pasta_trabalho"], "camauto", f"{meta.get('canal')}.json")
+                        try:
+                            with open(arq, encoding="utf-8") as f:
+                                cam = json.load(f)
+                        except (OSError, ValueError):
+                            cam = None
+                    fabrica.remontar(_seguro(alvo), d.get("inicio"), d.get("fim"), d.get("layout"),
+                                     d.get("legenda", True), cam)
                 elif acao == "aprovar":
                     fabrica.publicar_async(_seguro(alvo), corpo.strip() or None)
                 elif acao == "titulo":
@@ -317,7 +384,7 @@ def iniciar(fabrica, central, host, porta):
                     return self._enviar(404, "?", "text/plain")
             except FileNotFoundError:
                 return self._enviar(404, "clipe não encontrado", "text/plain; charset=utf-8")
-            except (RuntimeError, ValueError) as e:  # json inválido também cai aqui
+            except (RuntimeError, ValueError, TypeError) as e:  # json inválido também cai aqui
                 return self._enviar(409, str(e), "text/plain; charset=utf-8")
             self._enviar(200, "ok", "text/plain")
 

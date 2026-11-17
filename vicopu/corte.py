@@ -169,8 +169,21 @@ def _desistir_da_placa(preferencia):
         _escolhido[(preferencia or "auto").lower()] = "libx264"
 
 
+def guardar_fonte(ffmpeg, lista, pasta):
+    """Copia (sem recomprimir) o trecho bruto do replay pra pasta do clipe, pra dar pra
+    ajustar o corte e montar de novo depois que o replay já foi apagado."""
+    _rodar([ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0",
+            "-i", os.path.abspath(lista), "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
+            "-f", "mpegts", "fonte.ts"], cwd=pasta)
+    caminho = os.path.join(pasta, "lista_fonte.txt")
+    with open(caminho, "w", encoding="utf-8") as f:
+        f.write(f"file '{os.path.abspath(os.path.join(pasta, 'fonte.ts'))}'\n")
+    return caminho
+
+
 def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", facecam=None,
-               centro_x=0.5, legenda_ass=None, fps=30, crf=21, primeiro_seg=None, encoder="auto"):
+               centro_x=0.5, legenda_ass=None, fps=30, crf=21, primeiro_seg=None, encoder="auto",
+               saida="final.mp4"):
     grafo = grafo_layout(layout, facecam, centro_x)
     if legenda_ass:
         grafo = grafo.replace("[v]", "[v0]") + f";[v0]subtitles={os.path.basename(legenda_ass)}[v]"
@@ -183,7 +196,7 @@ def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", fa
         cmd += ["-map", "0:a:0?", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
                 "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
     enc = encoder_video(ffmpeg, encoder)
-    fim = ["-pix_fmt", "yuv420p", "-r", str(fps), "-movflags", "+faststart", "final.mp4"]
+    fim = ["-pix_fmt", "yuv420p", "-r", str(fps), "-movflags", "+faststart", saida]
     try:
         # cwd = pasta do clipe, assim a legenda não precisa de caminho com escape
         _rodar(cmd + _args_encoder(enc, crf) + fim, cwd=pasta)
@@ -194,4 +207,4 @@ def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", fa
         log.warning("A placa de vídeo falhou (%s). Passando a montar no processador.", str(e)[-200:])
         _desistir_da_placa(encoder)
         _rodar(cmd + _args_encoder("libx264", crf) + fim, cwd=pasta)
-    return os.path.join(pasta, "final.mp4")
+    return os.path.join(pasta, saida)

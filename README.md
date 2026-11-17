@@ -251,13 +251,20 @@ Parar uma live que está no `config.yaml` vale só até reiniciar; pra tirar de 
 
 **Descartados pela IA** também têm vídeo: dá pra assistir, ler o motivo do descarte e publicar mesmo assim, se a IA errou.
 
-**Clipes**, separados em abas: **Aguardando você · Em andamento · Publicados · Descartados · Todos**.
+**🌡 Termômetro:** cada live mostra quantas mensagens o chat está tendo, o "normal" dela e quão perto está de virar corte (a barra fica amarela perto e vermelha no pico). Logo depois de ligar aparece "aprendendo o ritmo do chat".
+
+**Sensibilidade na hora:** troque alta/normal/baixa no próprio card da live, sem parar nada.
+
+**🔔 Avisos** (canto de cima): liga um som e, com a aba em segundo plano, uma notificação do Windows quando cair clipe novo pra revisar. Fica lembrado no navegador.
+
+**Clipes**, separados em abas: **Aguardando você · Em andamento · Publicados · Descartados · Todos**, com um filtro por live ao lado.
 
 Em cada clipe:
 - **selos** com a duração e a nota da IA (verde, amarelo ou vermelho);
 - **título editável**, salvo sozinho;
 - **prévia do post**: a descrição como vai sair no YouTube (texto, crédito e hashtags) e, ao abrir, a legenda do TikTok;
 - botões **Publicar · ⬇ Baixar · 📋 Copiar · Descartar · 🗑 Excluir**;
+- **✂ Ajustar o corte:** mude início e fim dentro do trecho gravado (dá pra marcar pelo ponto em que o vídeo está, ou somar 5 s antes/depois), troque o layout (split, blur, centro) e ligue/desligue a legenda; **Montar de novo** refaz o vídeo em segundos. Funciona mesmo depois que o replay da live já passou, porque cada clipe guarda o trecho bruto (`fonte.ts`) na pasta dele;
 - **"Por que esse clipe?"**, com o motivo do corte e a avaliação da IA;
 - depois de publicado: os links **abrir** e **abrir no Studio**.
 
