@@ -359,8 +359,10 @@ def ajustar_pelo_rosto(caixa, rosto):
     x0, y0 = caixa["x"], caixa["y"]
     x1, y1 = x0 + caixa["w"], y0 + caixa["h"]
     if not (x0 - 0.02 <= fx0 and fx1 <= x1 + 0.02 and y0 - 0.02 <= fy0 and fy1 <= y1 + 0.02):
-        # a caixa nem contém o rosto: confia no rosto
-        return caixa_em_volta_do_rosto(rosto)
+        # o rosto achado no PC está fora da caixa do Claude: provavelmente é outro rosto
+        # (personagem do jogo, foto no overlay...). O Claude olhou com zoom: confia nele.
+        log.info("Rosto achado no PC fica fora da cam do Claude; mantenho a do Claude: %s", caixa)
+        return caixa
     # 1) molduras reais achadas saindo do rosto (ex.: a borda de cima de um banner de patrocínio
     #    logo abaixo do queixo) mandam mais que o palpite do Claude, se forem mais justas
     mold = rosto.get("_molduras") or {}

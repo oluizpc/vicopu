@@ -84,13 +84,16 @@ def estatisticas(cfg, conta, ids):
     tok = caminho_token(cfg, conta)
     if not os.path.exists(tok):
         raise RuntimeError(f"conta YouTube '{conta}' não autorizada")
-    cred = Credentials.from_authorized_user_file(tok)  # usa os escopos que o token já tem
-    if cred.scopes and not any(s.endswith(("youtube.readonly", "/youtube", "youtube.force-ssl")) for s in cred.scopes):
-        raise SemPermissaoDeLeitura(conta)
-    if not cred.valid:
+    from google.auth.exceptions import RefreshError
+    # Pede um acesso novo já com permissão de leitura. (O upload renova o token só com o escopo de
+    # upload, então o acesso salvo pode não servir pra ler; a autorização em si continua valendo.)
+    cred = Credentials.from_authorized_user_file(tok, ESCOPOS_AUTH)
+    try:
         cred.refresh(Request())
-        with open(tok, "w") as f:
-            f.write(cred.to_json())
+    except RefreshError as e:
+        if "scope" in str(e).lower():  # autorização antiga, feita só com upload
+            raise SemPermissaoDeLeitura(conta) from e
+        raise
     yt = build("youtube", "v3", credentials=cred, cache_discovery=False)
     saida = {}
     ids = list(dict.fromkeys(ids))
