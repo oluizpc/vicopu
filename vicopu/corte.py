@@ -124,17 +124,19 @@ _escolhido = {}
 _trava_enc = threading.Lock()
 
 
-def _args_encoder(enc, crf):
+def _args_encoder(enc, crf, fps=30):
+    alto = fps > 30  # 60 fps precisa de mais bitrate pra manter a mesma nitidez
+    teto, buf = ("24M", "48M") if alto else ("16M", "32M")
     if enc == "h264_nvenc":
         return ["-c:v", enc, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(crf), "-b:v", "0",
-                "-maxrate", "16M", "-bufsize", "32M"]
+                "-maxrate", teto, "-bufsize", buf]
     if enc == "h264_amf":
         # 'quality' + bitrate alto: jogo novo (GTA 6) tem muito detalhe e movimento; com 6 Mb/s a AMD borrava
         return ["-c:v", enc, "-usage", "transcoding", "-quality", "quality", "-rc", "vbr_peak",
-                "-b:v", "12M", "-maxrate", "16M", "-bufsize", "32M"]
+                "-b:v", "18M" if alto else "12M", "-maxrate", teto, "-bufsize", buf]
     if enc == "h264_qsv":
-        return ["-c:v", enc, "-preset", "slow", "-global_quality", str(crf), "-maxrate", "16M", "-bufsize", "32M"]
-    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-maxrate", "16M", "-bufsize", "32M"]
+        return ["-c:v", enc, "-preset", "slow", "-global_quality", str(crf), "-maxrate", teto, "-bufsize", buf]
+    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-maxrate", teto, "-bufsize", buf]
 
 
 def _funciona(ffmpeg, enc):
@@ -200,12 +202,12 @@ def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", fa
     fim = ["-pix_fmt", "yuv420p", "-r", str(fps), "-movflags", "+faststart", saida]
     try:
         # cwd = pasta do clipe, assim a legenda não precisa de caminho com escape
-        _rodar(cmd + _args_encoder(enc, crf) + fim, cwd=pasta)
+        _rodar(cmd + _args_encoder(enc, crf, fps) + fim, cwd=pasta)
     except RuntimeError as e:
         if enc == "libx264":
             raise
         # a placa falhou no meio (driver, limite de sessões...): refaz no processador e não insiste mais
         log.warning("A placa de vídeo falhou (%s). Passando a montar no processador.", str(e)[-200:])
         _desistir_da_placa(encoder)
-        _rodar(cmd + _args_encoder("libx264", crf) + fim, cwd=pasta)
+        _rodar(cmd + _args_encoder("libx264", crf, fps) + fim, cwd=pasta)
     return os.path.join(pasta, saida)
