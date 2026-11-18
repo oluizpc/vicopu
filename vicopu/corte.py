@@ -47,19 +47,19 @@ def grafo_layout(layout, facecam=None, centro_x=0.5):
         return (
             f"[0:v]split=2[cam][jogo];"
             f"[cam]crop=iw*{fc['w']}:ih*{fc['h']}:iw*{fc['x']}:ih*{fc['y']},"
-            f"scale={L}:{ALTURA_CAM}:force_original_aspect_ratio=increase,crop={L}:{ALTURA_CAM}[topo];"
-            f"[jogo]scale={L}:{alt_jogo}:force_original_aspect_ratio=increase,"
+            f"scale={L}:{ALTURA_CAM}:force_original_aspect_ratio=increase:flags=lanczos,crop={L}:{ALTURA_CAM}[topo];"
+            f"[jogo]scale={L}:{alt_jogo}:force_original_aspect_ratio=increase:flags=lanczos,"
             f"crop={L}:{alt_jogo}:(iw-{L})*{centro_x}:0[base];"
             f"[topo][base]vstack=inputs=2,setsar=1[v]"
         )
     if layout == "centro":
-        return (f"[0:v]scale={L}:{A}:force_original_aspect_ratio=increase,"
+        return (f"[0:v]scale={L}:{A}:force_original_aspect_ratio=increase:flags=lanczos,"
                 f"crop={L}:{A}:(iw-{L})*{centro_x}:0,setsar=1[v]")
     # "blur": jogo inteiro no meio, fundo desfocado (bom quando não tem facecam)
     return (
         f"[0:v]split=2[f][p];"
         f"[f]scale={L}:{A}:force_original_aspect_ratio=increase,crop={L}:{A},boxblur=20:2,eq=brightness=-0.08[fundo];"
-        f"[p]scale={L}:-2[meio];"
+        f"[p]scale={L}:-2:flags=lanczos[meio];"
         f"[fundo][meio]overlay=0:(H-h)/2,setsar=1[v]"
     )
 
@@ -126,14 +126,15 @@ _trava_enc = threading.Lock()
 
 def _args_encoder(enc, crf):
     if enc == "h264_nvenc":
-        return ["-c:v", enc, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(crf + 2), "-b:v", "0",
-                "-maxrate", "8M", "-bufsize", "16M"]
+        return ["-c:v", enc, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(crf), "-b:v", "0",
+                "-maxrate", "16M", "-bufsize", "32M"]
     if enc == "h264_amf":
-        return ["-c:v", enc, "-quality", "balanced", "-rc", "vbr_peak", "-b:v", "6M", "-maxrate", "8M",
-                "-bufsize", "16M"]
+        # 'quality' + bitrate alto: jogo novo (GTA 6) tem muito detalhe e movimento; com 6 Mb/s a AMD borrava
+        return ["-c:v", enc, "-usage", "transcoding", "-quality", "quality", "-rc", "vbr_peak",
+                "-b:v", "12M", "-maxrate", "16M", "-bufsize", "32M"]
     if enc == "h264_qsv":
-        return ["-c:v", enc, "-global_quality", str(crf + 2), "-maxrate", "8M", "-bufsize", "16M"]
-    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-maxrate", "8M", "-bufsize", "16M"]
+        return ["-c:v", enc, "-preset", "slow", "-global_quality", str(crf), "-maxrate", "16M", "-bufsize", "32M"]
+    return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-maxrate", "16M", "-bufsize", "32M"]
 
 
 def _funciona(ffmpeg, enc):
