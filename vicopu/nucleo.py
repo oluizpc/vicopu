@@ -314,7 +314,7 @@ class Fabrica:
                                           corte.altura_legenda(layout))
             corte.renderizar(ff, self.ffprobe, lista, ini + a, b - a, pasta, layout,
                              facecam, canal.get("centro_x", 0.5), ass, c["fps"], c["crf"],
-                             primeiro_seg=segs[0].caminho, encoder=c.get("encoder", "auto"))
+                             primeiro_seg=segs[0].caminho, encoder=c.get("encoder", "auto"), nitidez=c.get("nitidez", 0.6))
             meta.update({"corte": [round(a, 2), round(b, 2)], "layout": layout, "facecam": facecam,
                          "legenda": bool(ass), "centro_x": canal.get("centro_x", 0.5), "versao": 1})
         finally:
@@ -384,7 +384,7 @@ class Fabrica:
                              float(meta.get("fonte_ini", 0)) + a, b - a, pasta, layout, facecam,
                              meta.get("centro_x", 0.5), ass, c["fps"], c["crf"],
                              primeiro_seg=os.path.join(pasta, "fonte.ts"), encoder=c.get("encoder", "auto"),
-                             saida="novo.mp4")
+                             saida="novo.mp4", nitidez=c.get("nitidez", 0.6))
             for tentativa in range(10):  # no Windows o vídeo pode estar aberto no navegador por um instante
                 try:
                     os.replace(os.path.join(pasta, "novo.mp4"), os.path.join(pasta, "final.mp4"))

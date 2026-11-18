@@ -45,6 +45,7 @@ PADROES = {
         "modelo_whisper": "small",
         "whisper_dispositivo": "auto",  # auto | cpu | cuda (só NVIDIA)
         "encoder": "auto",  # auto | nvidia | amd | intel | cpu  (placa de vídeo pra montar os clipes)
+        "nitidez": 0.6,  # realce depois de ampliar (0 desliga, 1 forte)
         "idioma": "pt",
         "crf": 21,
     },

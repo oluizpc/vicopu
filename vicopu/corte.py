@@ -39,27 +39,33 @@ def extrair_audio(ffmpeg, lista, inicio, duracao, pasta):
     return saida
 
 
-def grafo_layout(layout, facecam=None, centro_x=0.5):
-    """Monta o filtro do ffmpeg para cada layout. Sai sempre em [v] 1080x1920."""
+def grafo_layout(layout, facecam=None, centro_x=0.5, nitidez=0.6):
+    """Monta o filtro do ffmpeg para cada layout. Sai sempre em [v] 1080x1920.
+
+    nitidez: realce depois de ampliar (0 = desliga). A live chega em 1080p comprimida e a gente
+    amplia pedaços dela (a cam ~4x, o jogo ~1,2x); um realce leve devolve a sensação de nitidez."""
+    n = max(0.0, min(1.5, float(nitidez or 0)))
+    real_cam = f",unsharp=5:5:{n * 1.3:.2f}:5:5:0" if n else ""
+    real_jogo = f",unsharp=5:5:{n:.2f}:5:5:0" if n else ""
     if layout == "split":
         fc = facecam or {"x": 0.0, "y": 0.0, "w": 0.25, "h": 0.3}
         alt_jogo = A - ALTURA_CAM
         return (
             f"[0:v]split=2[cam][jogo];"
             f"[cam]crop=iw*{fc['w']}:ih*{fc['h']}:iw*{fc['x']}:ih*{fc['y']},"
-            f"scale={L}:{ALTURA_CAM}:force_original_aspect_ratio=increase:flags=lanczos,crop={L}:{ALTURA_CAM}[topo];"
+            f"scale={L}:{ALTURA_CAM}:force_original_aspect_ratio=increase:flags=lanczos,crop={L}:{ALTURA_CAM}{real_cam}[topo];"
             f"[jogo]scale={L}:{alt_jogo}:force_original_aspect_ratio=increase:flags=lanczos,"
-            f"crop={L}:{alt_jogo}:(iw-{L})*{centro_x}:0[base];"
+            f"crop={L}:{alt_jogo}:(iw-{L})*{centro_x}:0{real_jogo}[base];"
             f"[topo][base]vstack=inputs=2,setsar=1[v]"
         )
     if layout == "centro":
         return (f"[0:v]scale={L}:{A}:force_original_aspect_ratio=increase:flags=lanczos,"
-                f"crop={L}:{A}:(iw-{L})*{centro_x}:0,setsar=1[v]")
+                f"crop={L}:{A}:(iw-{L})*{centro_x}:0{real_jogo},setsar=1[v]")
     # "blur": jogo inteiro no meio, fundo desfocado (bom quando não tem facecam)
     return (
         f"[0:v]split=2[f][p];"
         f"[f]scale={L}:{A}:force_original_aspect_ratio=increase,crop={L}:{A},boxblur=20:2,eq=brightness=-0.08[fundo];"
-        f"[p]scale={L}:-2:flags=lanczos[meio];"
+        f"[p]scale={L}:-2:flags=lanczos{real_jogo}[meio];"
         f"[fundo][meio]overlay=0:(H-h)/2,setsar=1[v]"
     )
 
@@ -186,8 +192,8 @@ def guardar_fonte(ffmpeg, lista, pasta):
 
 def renderizar(ffmpeg, ffprobe, lista, inicio, duracao, pasta, layout="blur", facecam=None,
                centro_x=0.5, legenda_ass=None, fps=30, crf=21, primeiro_seg=None, encoder="auto",
-               saida="final.mp4"):
-    grafo = grafo_layout(layout, facecam, centro_x)
+               saida="final.mp4", nitidez=0.6):
+    grafo = grafo_layout(layout, facecam, centro_x, nitidez)
     if legenda_ass:
         grafo = grafo.replace("[v]", "[v0]") + f";[v0]subtitles={os.path.basename(legenda_ass)}[v]"
     # -ss/-t ANTES do -i: os filtros (inclusive a legenda) enxergam o clipe começando no tempo 0.

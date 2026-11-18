@@ -569,6 +569,7 @@ Tudo é opcional, exceto `canais`. O que você não colocar usa o padrão.
 | `modelo_whisper` | `small` | `tiny`, `base`, `small` ou `medium` |
 | `whisper_dispositivo` | `auto` | `auto`, `cpu` ou `cuda` (NVIDIA) |
 | `encoder` | `auto` | `auto`, `amd`, `nvidia`, `intel` ou `cpu` |
+| `nitidez` | `0.6` | realce depois de ampliar a cam e o jogo (0 desliga, 1 forte) |
 | `idioma` | `pt` | idioma padrão da legenda (`""` = detectar sozinho) |
 
 ### `ia`
