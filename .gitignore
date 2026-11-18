@@ -11,3 +11,8 @@ __pycache__/
 *.key
 *client_secret*.json
 token*.json
+
+# qualquer config local (teste.yaml etc.) pode ter senha/chave: nunca vai pro git
+*.yaml
+!config.exemplo.yaml
+!config.gta6.yaml
