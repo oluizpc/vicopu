@@ -31,29 +31,90 @@ def _salvar(cfg, conta, dados):
         json.dump(dados, f)
 
 
-def autorizar(cfg, conta):
+REDIRECT_PADRAO = "http://127.0.0.1:8091/callback/"
+
+
+def _escopos(cfg, conta):
+    """Rascunho só precisa de video.upload; postar direto precisa de video.publish (Direct Post ligado no app)."""
+    modo = ((cfg.get("contas", {}).get("tiktok", {}) or {}).get(conta, {}) or {}).get("modo", "rascunho")
+    return "user.info.basic,video.upload" + (",video.publish" if modo == "direto" else "")
+
+
+def _esperar_codigo_local(porta, caminho, estado, segundos=300):
+    """Sobe um servidorzinho em 127.0.0.1 só pra pegar o 'code' que o TikTok devolve (app Desktop)."""
+    import http.server
+    import threading
+    pego = {}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            pego.update({k: v[0] for k, v in qs.items()})
+            ok = "code" in qs and qs.get("state", [""])[0] == estado
+            corpo = ("<h2>VICOPU: TikTok autorizado! Pode fechar esta aba.</h2>" if ok else
+                     f"<h2>VICOPU: nao deu certo ({pego.get('error_description') or pego.get('error') or 'sem code'}).</h2>")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(corpo.encode())
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", porta), H)
+    srv.timeout = 1
+    fim = time.time() + segundos
+    while time.time() < fim and "code" not in pego and "error" not in pego:
+        srv.handle_request()
+    srv.server_close()
+    return pego
+
+
+def autorizar(cfg, conta, abrir_navegador=True):
+    import hashlib
+    import webbrowser
     app = cfg["tiktok_app"]
-    if not (app["client_key"] and app["client_secret"] and app["redirect_uri"]):
-        raise SystemExit("Preencha tiktok_app (client_key, client_secret, redirect_uri) no config.")
+    if not (app["client_key"] and app["client_secret"]):
+        raise SystemExit("Preencha tiktok_app (client_key e client_secret) no config.")
+    redirect = app.get("redirect_uri") or REDIRECT_PADRAO
+    local = urllib.parse.urlparse(redirect)
+    desktop = local.hostname in ("127.0.0.1", "localhost")
     estado = secrets.token_urlsafe(12)
-    url = ("https://www.tiktok.com/v2/auth/authorize/?" + urllib.parse.urlencode({
-        "client_key": app["client_key"], "response_type": "code",
-        "scope": "user.info.basic,video.upload,video.publish",
-        "redirect_uri": app["redirect_uri"], "state": estado}))
-    print(f"\n1) Abra e autorize com a conta '{conta}':\n{url}\n")
-    print("2) Depois de autorizar, o navegador vai para o seu redirect_uri (pode até dar erro de página).")
-    volta = input("   Cole aqui o endereço COMPLETO da barra do navegador: ").strip()
-    qs = urllib.parse.parse_qs(urllib.parse.urlparse(volta).query)
-    if "code" not in qs:
-        raise SystemExit("Não achei o 'code' nesse endereço.")
-    r = requests.post(f"{API}/oauth/token/", timeout=30, data={
-        "client_key": app["client_key"], "client_secret": app["client_secret"],
-        "code": qs["code"][0], "grant_type": "authorization_code", "redirect_uri": app["redirect_uri"]})
+    params = {"client_key": app["client_key"], "response_type": "code", "scope": _escopos(cfg, conta),
+              "redirect_uri": redirect, "state": estado}
+    verificador = None
+    if desktop:  # app Desktop: o TikTok exige PKCE, com o desafio em SHA256 HEXADECIMAL (não base64)
+        verificador = secrets.token_urlsafe(64)[:64]
+        params.update({"code_challenge": hashlib.sha256(verificador.encode()).hexdigest(),
+                       "code_challenge_method": "S256"})
+    url = "https://www.tiktok.com/v2/auth/authorize/?" + urllib.parse.urlencode(params)
+    print(f"\nAutorize com a conta do TikTok '{conta}' (escopos: {params['scope']}).")
+    print(f"Se o navegador não abrir, copie este link:\n{url}\n")
+    if desktop:
+        if abrir_navegador:
+            webbrowser.open(url)
+        print("Esperando você autorizar no navegador (até 5 min)...")
+        volta = _esperar_codigo_local(local.port or 80, local.path, estado)
+    else:
+        print("Depois de autorizar, o navegador vai para o seu redirect_uri (pode até dar erro de página).")
+        endereco = input("Cole aqui o endereço COMPLETO da barra do navegador: ").strip()
+        volta = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlparse(endereco).query).items()}
+    if "code" not in volta:
+        raise SystemExit(f"O TikTok não devolveu o código: {volta.get('error_description') or volta.get('error') or volta}")
+    if volta.get("state") != estado:
+        raise SystemExit("Resposta do TikTok não confere (state diferente). Tente de novo.")
+    corpo = {"client_key": app["client_key"], "client_secret": app["client_secret"],
+             "code": urllib.parse.unquote(volta["code"]), "grant_type": "authorization_code",
+             "redirect_uri": redirect}
+    if verificador:
+        corpo["code_verifier"] = verificador
+    r = requests.post(f"{API}/oauth/token/", timeout=30, data=corpo,
+                      headers={"Content-Type": "application/x-www-form-urlencoded"})
     dados = r.json()
     if "access_token" not in dados:
         raise SystemExit(f"TikTok recusou: {dados}")
     _salvar(cfg, conta, dados)
-    print(f"OK! Token salvo. Escopos liberados: {dados.get('scope')}")
+    print(f"OK! Token salvo em {caminho_token(cfg, conta)}. Escopos liberados: {dados.get('scope')}")
 
 
 def _token(cfg, conta):

@@ -352,27 +352,33 @@ canais:
 
 ## 8. Publicar no TikTok
 
-> ⚠️ A parte do TikTok está implementada, mas **ainda não foi testada com uma conta real**.
+O VICOPU manda o clipe pro TikTok pela Content Posting API. O jeito mais fácil (sem passar pela revisão do TikTok) é o **modo rascunho**: o vídeo cai na **caixa de entrada do app do TikTok** no seu celular, e você só toca em publicar (dá até pra pôr música e efeito antes).
 
-1. Em **developers.tiktok.com**, crie um app com **Login Kit** e **Content Posting API**. Os escopos são `video.upload` e `video.publish`, e o redirect URI é qualquer URL https sua.
-2. Guarde a chave e o segredo do app no Windows (`setx TIKTOK_CLIENT_KEY "..."` e `setx TIKTOK_CLIENT_SECRET "..."`, depois feche e abra o Prompt) e adicione ao `config.yaml`:
-   ```yaml
-   tiktok_app:
-     client_key: ${TIKTOK_CLIENT_KEY}        # lido do Windows, não escreva a chave aqui
-     client_secret: ${TIKTOK_CLIENT_SECRET}
-     redirect_uri: https://seusite.com/tiktok/callback
-   ```
-3. Rode `python -m vicopu auth-tiktok minhaconta`, autorize e cole de volta o endereço completo da barra do navegador.
-4. No config:
-   ```yaml
-   contas:
-     tiktok:
-       minhaconta:
-         modo: rascunho            # rascunho: cai no app pra você postar · direto: publica sozinho
-   ```
-   No modo `direto`, enquanto o app não passar na auditoria do TikTok, os vídeos saem **privados**.
+### 8.1 Criar o app no TikTok (uma vez)
+1. Em **developers.tiktok.com**, entre com a sua conta e vá em **Manage apps → Connect an app**. Tipo: individual.
+2. Preencha nome, ícone, categoria, descrição, e os links de **Termos** e **Privacidade** (pode usar o link do seu canal ou deste repositório).
+3. Em **Platforms**, marque **Desktop**.
+4. Em **Products**, adicione **Login Kit** e **Content Posting API**.
+5. No **Login Kit**, na aba **Desktop**, coloque o Redirect URI: `http://127.0.0.1:8091/callback/`
+6. Em **Scopes**, deixe `user.info.basic` e `video.upload` (o `video.publish` só se for usar o modo direto).
+7. Crie uma **Sandbox** (botão **Sandbox** no topo/lateral), e em **Target users** adicione a sua conta do TikTok. Na sandbox não precisa de revisão.
+8. Copie o **Client key** e o **Client secret** (da sandbox).
 
----
+### 8.2 Ligar no VICOPU
+```yaml
+tiktok_app:
+  client_key: "SEU_CLIENT_KEY"
+  client_secret: "SEU_CLIENT_SECRET"
+  redirect_uri: "http://127.0.0.1:8091/callback/"
+
+contas:
+  tiktok:
+    minhaconta:
+      modo: rascunho      # cai na caixa de entrada do app; "direto" posta sozinho (privado até o app ser aprovado)
+```
+Depois rode `python -m vicopu auth-tiktok minhaconta`: o navegador abre, você autoriza e o VICOPU pega a resposta sozinho. Nos canais, use `publicar_em: [youtube:teste, tiktok:minhaconta]`.
+
+Enquanto o app não passar na revisão do TikTok, posts no modo **direto** saem só como **privados**; por isso o padrão é o **rascunho**.
 
 ## 9. Como a detecção funciona e como calibrar
 

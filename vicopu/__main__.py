@@ -113,6 +113,7 @@ def main():
     a.add_argument("--sem-navegador", action="store_true", help="não abrir o navegador (servidor sem tela)")
     b = sub.add_parser("auth-tiktok")
     b.add_argument("conta")
+    b.add_argument("--sem-navegador", action="store_true")
     t = sub.add_parser("testar-layout")
     t.add_argument("canal")
     t.add_argument("video")
@@ -143,7 +144,7 @@ def main():
         youtube.autorizar(cfg, args.conta, args.porta, not args.sem_navegador)
     elif args.cmd == "auth-tiktok":
         from .publicar import tiktok
-        tiktok.autorizar(cfg, args.conta)
+        tiktok.autorizar(cfg, args.conta, abrir_navegador=not args.sem_navegador)
     elif args.cmd == "testar-layout":
         testar_layout(cfg, args.canal, args.video)
 
